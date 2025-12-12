@@ -1,0 +1,20 @@
+[project]
+name = "comfyui-prompt-generator"
+description = "Generate Stable Diffusion prompts using Qwen3-8B via Ollama with 7 style presets"
+version = "1.0.0"
+license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://github.com/Limbicnation/ComfyUI-PromptGenerator"
+Repository = "https://github.com/Limbicnation/ComfyUI-PromptGenerator.git"
+Issues = "https://github.com/Limbicnation/ComfyUI-PromptGenerator/issues"
+
+[tool.comfy]
+PublisherId = "limbicnation"
+DisplayName = "Prompt Generator"
+Icon = "🎨"
+
+[tool.comfy.python]
+requires-python = ">=3.10"

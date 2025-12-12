@@ -1,0 +1,135 @@
+# Prompt Generator Style Templates
+# Use Jinja2 syntax: {{ variable }}, {% if condition %}...{% endif %}
+
+cinematic:
+  name: "Cinematic"
+  description: "Dramatic lighting and composition for film-quality images"
+  template: |
+    Write a detailed Stable Diffusion prompt for: {{ description }}
+    
+    Style: Create a cinematic scene with dramatic lighting and composition.
+    {% if emphasis %}Focus particularly on: {{ emphasis }}{% endif %}
+    {% if mood %}Mood/Atmosphere: {{ mood }}{% endif %}
+    
+    Include specific details about:
+    - Composition and framing
+    - Lighting (dramatic, moody)
+    - Color palette
+    - Atmosphere and depth
+    - Technical qualities (8k, high detail)
+    
+    Format the response as a single, detailed prompt.
+
+anime:
+  name: "Anime"
+  description: "Vibrant anime-style illustration with dynamic colors"
+  template: |
+    Write a detailed Stable Diffusion prompt for: {{ description }}
+    
+    Style: Design an anime-style illustration with vibrant colors and expressive details.
+    {% if emphasis %}Focus particularly on: {{ emphasis }}{% endif %}
+    {% if mood %}Mood/Atmosphere: {{ mood }}{% endif %}
+    
+    Include specific details about:
+    - Anime art style elements
+    - Dynamic composition
+    - Vibrant color palette
+    - Character expression (if applicable)
+    - Background and atmosphere
+    
+    Format the response as a single, detailed prompt in anime style.
+
+photorealistic:
+  name: "Photorealistic"
+  description: "High-detail realistic images with natural lighting"
+  template: |
+    Write a detailed Stable Diffusion prompt for: {{ description }}
+    
+    Style: Generate a photorealistic image with high detail and natural lighting.
+    {% if emphasis %}Focus particularly on: {{ emphasis }}{% endif %}
+    {% if mood %}Mood/Atmosphere: {{ mood }}{% endif %}
+    
+    Include specific details about:
+    - Realistic textures and materials
+    - Natural lighting conditions
+    - Depth of field and focus
+    - Environmental details
+    - Camera and lens qualities (e.g., DSLR, 85mm)
+    
+    Format the response as a single, detailed prompt for photorealistic output.
+
+fantasy:
+  name: "Fantasy"
+  description: "Magical elements and themes with ethereal atmosphere"
+  template: |
+    Write a detailed Stable Diffusion prompt for: {{ description }}
+    
+    Style: Create a fantasy-themed illustration with magical elements.
+    {% if emphasis %}Focus particularly on: {{ emphasis }}{% endif %}
+    {% if mood %}Mood/Atmosphere: {{ mood }}{% endif %}
+    
+    Include specific details about:
+    - Magical and mystical elements
+    - Ethereal lighting and glow effects
+    - Rich fantasy color palette
+    - Atmospheric depth and wonder
+    - Intricate details and ornamentation
+    
+    Format the response as a single, detailed fantasy prompt.
+
+abstract:
+  name: "Abstract"
+  description: "Artistic abstract compositions with creative expression"
+  template: |
+    Write a detailed Stable Diffusion prompt for: {{ description }}
+    
+    Style: Design an abstract artistic composition.
+    {% if emphasis %}Focus particularly on: {{ emphasis }}{% endif %}
+    {% if mood %}Mood/Atmosphere: {{ mood }}{% endif %}
+    
+    Include specific details about:
+    - Abstract shapes and forms
+    - Color theory and palette
+    - Texture and pattern
+    - Visual rhythm and flow
+    - Emotional expression
+    
+    Format the response as a single, detailed abstract art prompt.
+
+cyberpunk:
+  name: "Cyberpunk"
+  description: "Neon lights, high technology, and urban dystopia"
+  template: |
+    Write a detailed Stable Diffusion prompt for: {{ description }}
+    
+    Style: Create a cyberpunk-themed image with neon lights, high technology, and urban dystopia.
+    {% if emphasis %}Focus particularly on: {{ emphasis }}{% endif %}
+    {% if mood %}Mood/Atmosphere: {{ mood }}{% endif %}
+    
+    Include specific details about:
+    - Neon lighting and reflections
+    - Futuristic technology elements
+    - Urban dystopian environment
+    - Rain/wet surfaces for reflections
+    - Cybernetic and tech details
+    
+    Format the response as a single, detailed cyberpunk prompt.
+
+sci-fi:
+  name: "Sci-Fi"
+  description: "Futuristic technology and space exploration scenes"
+  template: |
+    Write a detailed Stable Diffusion prompt for: {{ description }}
+    
+    Style: Generate a science fiction scene with futuristic technology.
+    {% if emphasis %}Focus particularly on: {{ emphasis }}{% endif %}
+    {% if mood %}Mood/Atmosphere: {{ mood }}{% endif %}
+    
+    Include specific details about:
+    - Futuristic technology and spacecraft
+    - Space environments or alien worlds
+    - Advanced materials and surfaces
+    - Dramatic sci-fi lighting
+    - Scale and grandeur
+    
+    Format the response as a single, detailed sci-fi prompt.
