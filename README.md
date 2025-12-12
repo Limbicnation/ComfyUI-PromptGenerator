@@ -5,6 +5,8 @@ Generate detailed Stable Diffusion prompts using **Qwen3-8B** via Ollama, direct
 ![ComfyUI Node](https://img.shields.io/badge/ComfyUI-Custom_Node-blue)
 ![License](https://img.shields.io/badge/License-Apache_2.0-green)
 
+![Feature Image](images/comfyui-prompt-gen-feature.jpg)
+
 ## Features
 
 - **7 Style Presets**: Cinematic, Anime, Photorealistic, Fantasy, Abstract, Cyberpunk, Sci-Fi
@@ -58,9 +60,9 @@ Search for "Prompt Generator" in the ComfyUI Manager and install.
 
 ### Example Workflow
 
-```
-[Prompt Generator] → [CLIP Text Encode] → [KSampler] → [VAE Decode] → [Save Image]
-```
+Download the example workflow: [workflow/workflow.png](workflow/workflow.png)
+
+![Workflow](workflow/workflow.png)
 
 ## Customizing Styles
 
@@ -95,6 +97,10 @@ my_custom_style:
 
 Apache 2.0 - See [LICENSE](LICENSE) for details.
 
+## Related Projects
+
+- **[Prompt Generator (Gradio App)](https://github.com/Limbicnation/prompt-gen)** - Standalone Gradio web UI for prompt generation
+
 ## Credits
 
-Based on the [prompt-gen](https://github.com/Limbicnation/prompt-gen) project.
+This ComfyUI node is based on the [prompt-gen](https://github.com/Limbicnation/prompt-gen) project.
