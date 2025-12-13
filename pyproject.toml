@@ -14,7 +14,7 @@ Issues = "https://github.com/Limbicnation/ComfyUI-PromptGenerator/issues"
 [tool.comfy]
 PublisherId = "limbicnation"
 DisplayName = "Prompt Generator"
-Icon = "prompt-gen-icon.png"
+Icon = "icon.png"
 
 [tool.comfy.python]
 requires-python = ">=3.10"
