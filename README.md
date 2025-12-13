@@ -1,3 +1,5 @@
+<img src="prompt-gen-icon.png" alt="Prompt Generator Icon" width="64" align="left" style="margin-right: 15px;">
+
 # 🎨 ComfyUI Prompt Generator
 
 Generate detailed Stable Diffusion prompts using **Qwen3-8B** via Ollama, directly within ComfyUI.
