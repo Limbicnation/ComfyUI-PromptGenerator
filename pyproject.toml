@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-prompt-generator"
 description = "Generate Stable Diffusion prompts using Qwen3-8B via Ollama with 7 style presets"
-version = "1.0.2"
+version = "1.0.3"
 license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.10"
