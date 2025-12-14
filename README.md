@@ -41,6 +41,8 @@ pip install -r requirements.txt
 
 Search for "Prompt Generator" in the ComfyUI Manager and install.
 
+**Note**: If you see "With the current security level configuration, only custom nodes from the 'default channel' can be installed", temporarily set `security_level = weak` in your ComfyUI Manager's `config.ini` file, then restore it to `normal` after installation. See [PUBLISHING.md](PUBLISHING.md) for details.
+
 ## Usage
 
 1. Restart ComfyUI after installation

@@ -1,0 +1,47 @@
+name: Publish to ComfyUI Registry
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Validate version match
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          TOML_VERSION=$(grep "version" pyproject.toml | head -1 | cut -d'"' -f2)
+          echo "Tag version: $TAG_VERSION"
+          echo "pyproject.toml version: $TOML_VERSION"
+          if [ "$TAG_VERSION" != "$TOML_VERSION" ]; then
+            echo "❌ Tag v$TAG_VERSION doesn't match pyproject.toml version $TOML_VERSION"
+            exit 1
+          fi
+          echo "✅ Version validation passed"
+
+      - name: Install comfy-cli
+        run: |
+          pip install comfy-cli
+
+      - name: Validate node metadata
+        run: |
+          comfy node validate
+
+      - name: Publish to Registry
+        env:
+          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+        run: |
+          comfy node publish --confirm
