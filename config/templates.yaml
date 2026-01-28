@@ -20,6 +20,26 @@ cinematic:
     
     Format the response as a single, detailed prompt.
 
+still_image:
+  name: "Still Image (Photography)"
+  description: "Sharp, realistic photography with technical camera specifications"
+  template: |
+    Write a detailed Stable Diffusion prompt for: {{ description }}
+    
+    Style: Generate a professional photography still image with sharp focus.
+    {% if emphasis %}Focus particularly on: {{ emphasis }}{% endif %}
+    {% if mood %}Mood/Atmosphere: {{ mood }}{% endif %}
+    
+    Include specific details about:
+    - Camera settings (ISO 100, f/2.8 aperture, sharp optics)
+    - Natural or studio lighting
+    - Realistic textures and fine details
+    - Clean, balanced composition
+    - Professional photography qualities
+    
+    Format the response as a single, detailed photography prompt.
+
+
 anime:
   name: "Anime"
   description: "Vibrant anime-style illustration with dynamic colors"

@@ -17,6 +17,7 @@ config/
 ```
 
 **Single node design**: All functionality is in `PromptGeneratorNode`. The node:
+
 1. Loads style templates from YAML (or uses hardcoded defaults)
 2. Renders the selected template with Jinja2 (or regex fallback)
 3. Calls Ollama via Python API (or subprocess fallback)
@@ -27,15 +28,18 @@ config/
 ## Development
 
 **Prerequisites**:
+
 - Ollama running locally with `qwen3:8b` model pulled
 - ComfyUI installation for integration testing
 
 **Install dependencies**:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 **Lint with ruff** (already configured in project):
+
 ```bash
 ruff check .
 ruff format .
@@ -46,6 +50,7 @@ ruff format .
 ## Key Patterns
 
 **ComfyUI node structure**:
+
 - `INPUT_TYPES()`: Class method returning dict with `required` and `optional` inputs
 - `RETURN_TYPES`, `RETURN_NAMES`: Output type definitions
 - `FUNCTION`: Name of the method to call (`generate`)
@@ -54,6 +59,29 @@ ruff format .
 **Template system**: Templates in `config/templates.yaml` use Jinja2 syntax. Variables: `{{ description }}`, `{{ emphasis }}`, `{{ mood }}`. Conditionals: `{% if emphasis %}...{% endif %}`.
 
 **Output cleaning**: `extract_final_prompt()` strips Qwen3's "Thinking..." blocks and markdown formatting from responses.
+
+## Publishing
+
+**Current version**: `1.0.4` (Published 2024-12-14)
+
+**Registry**: [registry.comfy.org](https://registry.comfy.org) - Node ID: `comfyui-prompt-generator`
+
+**Publish a new version**:
+
+```bash
+# 1. Update version in pyproject.toml
+# 2. Commit changes
+git add -A && git commit -m "chore: bump version to X.Y.Z"
+
+# 3. Tag and push (triggers GitHub Actions workflow)
+git tag vX.Y.Z
+git push origin main && git push origin vX.Y.Z
+
+# Or publish manually:
+comfy node publish --confirm
+```
+
+**CI/CD**: `.github/workflows/publish.yml` auto-publishes on version tags (`v*.*.*`).
 
 ## Adding New Styles
 
