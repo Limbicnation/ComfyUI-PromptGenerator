@@ -88,3 +88,31 @@ comfy node publish --confirm
 1. Add entry to `config/templates.yaml` following existing format
 2. Add style key to `INPUT_TYPES()` style combo list in `prompt_generator_node.py`
 3. Optionally add to `DEFAULT_STYLES` dict for fallback when YAML unavailable
+
+- **Current version**: `1.1.1` - Added dynamic LoRA model selection and prioritization. (2026-02-02)
+- **LoRA Training**: Trained QLoRA on Qwen3-4B-Instruct-2507 using the Limbicnation Video Diffusion Prompt dataset.
+- **Quantization**: Merged LoRA and converted to Q8_0 GGUF for Ollama.
+- **Integration**: `PromptGeneratorNode` now auto-discovers and prioritizes models containing `lora` or `limbicnation` keywords.
+
+### Creating a LoRA-Enhanced Model
+
+1. Fine-tune a LoRA on the [Limbicnation/Images-Diffusion-Prompt-Style](https://huggingface.co/datasets/Limbicnation/Images-Diffusion-Prompt-Style) dataset (750 prompts)
+
+2. Export as `.safetensors` (non-quantized recommended)
+
+3. Create the Ollama model:
+
+   ```bash
+   # Edit config/Modelfile.limbicnation with your adapter path
+   ollama create qwen3-limbicnation -f config/Modelfile.limbicnation
+   ```
+
+4. Restart ComfyUI - the new model will appear in the dropdown
+
+### Modelfile Template
+
+See `config/Modelfile.limbicnation` for a pre-configured template with:
+
+- Limbicnation system prompt
+- Optimal temperature/top_p settings
+- ADAPTER placeholder for your LoRA
