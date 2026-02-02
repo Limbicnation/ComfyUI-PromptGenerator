@@ -19,6 +19,13 @@ cinematic:
     - Technical qualities (8k, high detail)
     
     Format the response as a single, detailed prompt.
+    
+video_wan:
+  name: "Video (WanVideo)"
+  description: "Minimalist template optimized for WanVideo LoRA"
+  template: |
+    Generate a video prompt for: {{ description }}{% if emphasis %} with focus on {{ emphasis }}{% endif %}{% if mood %}, mood is {{ mood }}{% endif %}
+
 
 still_image:
   name: "Still Image (Photography)"

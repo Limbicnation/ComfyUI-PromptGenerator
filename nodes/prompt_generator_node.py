@@ -44,6 +44,9 @@ def extract_final_prompt(text: str) -> str:
     text = re.sub(r'\*\*(?:Stable Diffusion )?Prompt:\*\*\s*', '', text)
     text = re.sub(r'\*\*Prompt for Image Generation:\*\*\s*', '', text)
     
+    # Remove stray "None" strings often seen in CLI/model leakage
+    text = re.sub(r'\s*None\s*', '', text)
+    
     # Clean up any leading/trailing whitespace and quotes
     text = text.strip().strip('"').strip()
     
@@ -188,6 +191,11 @@ Include specific details about:
 - Scale and grandeur
 
 Format the response as a single, detailed sci-fi prompt."""
+        },
+        "video_wan": {
+            "name": "Video (WanVideo)",
+            "description": "Minimalist template optimized for WanVideo LoRA",
+            "template": "Generate a video prompt for: {{ description }}{% if emphasis %} with focus on {{ emphasis }}{% endif %}{% if mood %}, mood is {{ mood }}{% endif %}"
         }
     }
     
@@ -257,7 +265,7 @@ Format the response as a single, detailed sci-fi prompt."""
                     "placeholder": "e.g., a mystical forest at twilight"
                 }),
                 "style": (["cinematic", "anime", "photorealistic", "fantasy", 
-                           "abstract", "cyberpunk", "sci-fi"], {
+                           "abstract", "cyberpunk", "sci-fi", "video_wan"], {
                     "default": "cinematic"
                 }),
                 "model": (available_models, {
