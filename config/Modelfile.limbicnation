@@ -1,0 +1,33 @@
+# Limbicnation LoRA Modelfile Template
+# 
+# This Modelfile creates an Ollama model with the Limbicnation image prompt style LoRA.
+# 
+# Usage:
+#   1. Fine-tune your LoRA using the 750 prompts from Limbicnation/Images-Diffusion-Prompt-Style
+#   2. Export as .safetensors (non-quantized recommended)
+#   3. Update the ADAPTER path below
+#   4. Run: ollama create qwen3-limbicnation -f Modelfile.limbicnation
+#   5. Test: ollama run qwen3-limbicnation "Generate a cinematic forest prompt"
+
+# Base model - use the same model you fine-tuned the LoRA on
+FROM qwen3:4b
+
+# LoRA adapter path (update this to your fine-tuned adapter)
+# ADAPTER /path/to/limbicnation-lora.safetensors
+
+# System prompt for image prompt generation
+SYSTEM """You are an expert AI Image Prompt Engineer specializing in the "Limbicnation" aesthetic.
+Your prompts emphasize: cinematic lighting, intricate textures, evocative atmosphere, dramatic compositions.
+
+When generating image prompts:
+1. Use rich, sensory language
+2. Include quality tokens: photorealistic, 8k, detailed, masterpiece
+3. Specify lighting and atmosphere
+4. Add negative prompts when requested
+5. Format for Flux, Z Image, or Stable Diffusion models
+"""
+
+# Optimal parameters for prompt generation
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER num_ctx 4096
