@@ -191,14 +191,64 @@ Format the response as a single, detailed sci-fi prompt."""
         }
     }
     
+    # Class-level cache for available models
+    _cached_models = None
+    _cache_time = 0
+    
     def __init__(self):
         """Initialize the node and load style templates."""
         self.style_templates = self._load_templates()
         self.timeout = 120
     
     @classmethod
+    def _get_available_models(cls) -> list:
+        """
+        Fetch available Ollama models with caching.
+        Prioritizes LoRA-enhanced models (containing 'lora', 'limbicnation', 'fine').
+        """
+        import time
+        
+        # Cache for 60 seconds
+        if cls._cached_models and (time.time() - cls._cache_time) < 60:
+            return cls._cached_models
+        
+        default_models = ["qwen3:8b", "qwen3:4b", "llama3.2:latest"]
+        
+        if not OLLAMA_API_AVAILABLE:
+            return default_models
+        
+        try:
+            result = ollama.list()
+            models = [m.get('name', m.get('model', '')) for m in result.get('models', [])]
+            
+            if not models:
+                return default_models
+            
+            # Sort: LoRA/fine-tuned models first, then alphabetically
+            lora_keywords = ['lora', 'limbicnation', 'fine', 'style', 'prompt']
+            
+            def sort_key(name):
+                name_lower = name.lower()
+                is_lora = any(kw in name_lower for kw in lora_keywords)
+                return (0 if is_lora else 1, name)
+            
+            models = sorted(models, key=sort_key)
+            
+            cls._cached_models = models
+            cls._cache_time = time.time()
+            
+            print(f"[PromptGenerator] Found {len(models)} Ollama models")
+            return models
+            
+        except Exception as e:
+            print(f"[PromptGenerator] Could not fetch models: {e}")
+            return default_models
+    
+    @classmethod
     def INPUT_TYPES(cls) -> Dict[str, Any]:
         """Define input parameters for the node."""
+        available_models = cls._get_available_models()
+        
         return {
             "required": {
                 "description": ("STRING", {
@@ -209,6 +259,10 @@ Format the response as a single, detailed sci-fi prompt."""
                 "style": (["cinematic", "anime", "photorealistic", "fantasy", 
                            "abstract", "cyberpunk", "sci-fi"], {
                     "default": "cinematic"
+                }),
+                "model": (available_models, {
+                    "default": available_models[0] if available_models else "qwen3:8b",
+                    "tooltip": "Select Ollama model. LoRA-enhanced models appear first."
                 }),
             },
             "optional": {
@@ -239,9 +293,6 @@ Format the response as a single, detailed sci-fi prompt."""
                     "label_on": "Show Reasoning",
                     "label_off": "Hide Reasoning"
                 }),
-                "model": ("STRING", {
-                    "default": "qwen3:8b"
-                }),
             }
         }
     
@@ -250,6 +301,7 @@ Format the response as a single, detailed sci-fi prompt."""
     FUNCTION = "generate"
     CATEGORY = "text/generation"
     OUTPUT_NODE = False
+
     
     def _load_templates(self) -> Dict[str, Any]:
         """Load style templates from YAML file or use defaults."""
