@@ -89,17 +89,10 @@ comfy node publish --confirm
 2. Add style key to `INPUT_TYPES()` style combo list in `prompt_generator_node.py`
 3. Optionally add to `DEFAULT_STYLES` dict for fallback when YAML unavailable
 
-## LoRA Integration
-
-**Current version**: `1.1.0` - Added dynamic LoRA model selection
-
-### Dynamic Model Selection
-
-The node now auto-discovers available Ollama models and prioritizes LoRA-enhanced models in the dropdown:
-
-- Models with keywords `lora`, `limbicnation`, `fine`, `style`, `prompt` appear first
-- Model list is cached for 60 seconds for performance
-- Graceful fallback to defaults if Ollama is unavailable
+- **Current version**: `1.1.1` - Added dynamic LoRA model selection and prioritization. (2026-02-02)
+- **LoRA Training**: Trained QLoRA on Qwen3-4B-Instruct-2507 using the Limbicnation Video Diffusion Prompt dataset.
+- **Quantization**: Merged LoRA and converted to Q8_0 GGUF for Ollama.
+- **Integration**: `PromptGeneratorNode` now auto-discovers and prioritizes models containing `lora` or `limbicnation` keywords.
 
 ### Creating a LoRA-Enhanced Model
 
