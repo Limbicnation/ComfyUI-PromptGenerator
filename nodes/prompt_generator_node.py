@@ -219,7 +219,7 @@ Format the response as a single, detailed sci-fi prompt."""
         
         try:
             result = ollama.list()
-            models = [m['name'] for m in result.get('models', []) if 'name' in m]
+            models = [m.get('model', '') for m in result.get('models', []) if 'model' in m]
             
             if not models:
                 return default_models
