@@ -226,8 +226,6 @@ Format the response as a single, detailed sci-fi prompt.""",
         Fetch available Ollama models with caching.
         Prioritizes LoRA-enhanced models (containing 'lora', 'limbicnation', 'fine').
         """
-        import time
-
         # Cache for 60 seconds
         if cls._cached_models and (time.time() - cls._cache_time) < 60:
             return cls._cached_models
