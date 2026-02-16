@@ -4,32 +4,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ComfyUI custom node that generates Stable Diffusion prompts using Qwen3-8B via Ollama. Users provide a brief description and select a style preset; the node outputs a detailed, optimized prompt.
+ComfyUI custom node that generates Stable Diffusion prompts using Ollama. Users provide a brief description and select a style preset; the node outputs a detailed, optimized prompt. Supports LoRA-enhanced models with automatic discovery and prioritization.
+
+**Current version**: `1.1.6`
 
 ## Architecture
 
 ```
-__init__.py                 # ComfyUI entry point, exports NODE_CLASS_MAPPINGS
+__init__.py                     # ComfyUI entry point, exports NODE_CLASS_MAPPINGS
 nodes/
-  prompt_generator_node.py  # PromptGeneratorNode class with all logic
+  prompt_generator_node.py      # PromptGeneratorNode class with all logic
 config/
-  templates.yaml            # Jinja2 style templates (editable by users)
+  templates.yaml                # Jinja2 style templates (editable by users)
+  Modelfile.limbicnation        # Ollama Modelfile for LoRA-enhanced model
 ```
 
 **Single node design**: All functionality is in `PromptGeneratorNode`. The node:
 
 1. Loads style templates from YAML (or uses hardcoded defaults)
 2. Renders the selected template with Jinja2 (or regex fallback)
-3. Calls Ollama via Python API (or subprocess fallback)
+3. Calls Ollama via streaming API with per-chunk timeouts and ComfyUI ProgressBar integration
 4. Strips reasoning/thinking from output unless `include_reasoning=True`
 
 **Graceful degradation**: Optional imports (`yaml`, `jinja2`, `ollama`) have fallbacks. The node works with subprocess calls even if Python packages aren't installed.
+
+**Streaming & timeouts** (v1.1.6): `_generate_with_streaming()` uses a background thread to enforce per-chunk (30s) and total timeouts, avoiding the 120s blocking timeout issue. Cold starts get a 1.3x timeout multiplier.
 
 ## Development
 
 **Prerequisites**:
 
-- Ollama running locally with `qwen3:8b` model pulled
+- Ollama running locally with a model pulled (e.g. `qwen3:8b`)
 - ComfyUI installation for integration testing
 
 **Install dependencies**:
@@ -54,15 +59,15 @@ ruff format .
 - `INPUT_TYPES()`: Class method returning dict with `required` and `optional` inputs
 - `RETURN_TYPES`, `RETURN_NAMES`: Output type definitions
 - `FUNCTION`: Name of the method to call (`generate`)
-- `CATEGORY`: Where node appears in ComfyUI menu
+- `CATEGORY`: Where node appears in ComfyUI menu (`text/generation`)
 
 **Template system**: Templates in `config/templates.yaml` use Jinja2 syntax. Variables: `{{ description }}`, `{{ emphasis }}`, `{{ mood }}`. Conditionals: `{% if emphasis %}...{% endif %}`.
 
 **Output cleaning**: `extract_final_prompt()` strips Qwen3's "Thinking..." blocks and markdown formatting from responses.
 
-## Publishing
+**Model discovery**: The node auto-discovers Ollama models and prioritizes those containing `lora` or `limbicnation` keywords. All available models appear in the dropdown.
 
-**Current version**: `1.0.4` (Published 2024-12-14)
+## Publishing
 
 **Registry**: [registry.comfy.org](https://registry.comfy.org) - Node ID: `comfyui-prompt-generator`
 
@@ -89,25 +94,22 @@ comfy node publish --confirm
 2. Add style key to `INPUT_TYPES()` style combo list in `prompt_generator_node.py`
 3. Optionally add to `DEFAULT_STYLES` dict for fallback when YAML unavailable
 
-- **Current version**: `1.1.1` - Added dynamic LoRA model selection and prioritization. (2026-02-02)
-- **LoRA Training**: Trained QLoRA on Qwen3-4B-Instruct-2507 using the Limbicnation Video Diffusion Prompt dataset.
-- **Quantization**: Merged LoRA and converted to Q8_0 GGUF for Ollama.
-- **Integration**: `PromptGeneratorNode` now auto-discovers and prioritizes models containing `lora` or `limbicnation` keywords.
+## LoRA-Enhanced Models
+
+- **Training**: QLoRA on Qwen3-4B-Instruct-2507 using the [Limbicnation/Images-Diffusion-Prompt-Style](https://huggingface.co/datasets/Limbicnation/Images-Diffusion-Prompt-Style) dataset (750 prompts)
+- **Quantization**: Merged LoRA and converted to Q8_0 GGUF for Ollama
+- **Integration**: `PromptGeneratorNode` auto-discovers and prioritizes models containing `lora` or `limbicnation` keywords
 
 ### Creating a LoRA-Enhanced Model
 
-1. Fine-tune a LoRA on the [Limbicnation/Images-Diffusion-Prompt-Style](https://huggingface.co/datasets/Limbicnation/Images-Diffusion-Prompt-Style) dataset (750 prompts)
-
+1. Fine-tune a LoRA on the dataset above
 2. Export as `.safetensors` (non-quantized recommended)
-
 3. Create the Ollama model:
-
    ```bash
    # Edit config/Modelfile.limbicnation with your adapter path
    ollama create qwen3-limbicnation -f config/Modelfile.limbicnation
    ```
-
-4. Restart ComfyUI - the new model will appear in the dropdown
+4. Restart ComfyUI — the new model will appear in the dropdown
 
 ### Modelfile Template
 
