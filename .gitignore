@@ -191,6 +191,10 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Claude Code
+.claude/
+AGENTS.md
+
 # PyPI configuration file
 .pypirc
 
