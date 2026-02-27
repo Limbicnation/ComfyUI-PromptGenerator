@@ -294,8 +294,10 @@ Format the response as a single, detailed photography prompt.""",
                     templates = yaml.safe_load(f)
                     if templates:
                         return list(templates.keys())
-            except Exception:
-                pass
+            except Exception as e:
+                print(
+                    f"[PromptGenerator] Warning: Failed to load style list from templates.yaml: {e}"
+                )
         return list(cls.DEFAULT_STYLES.keys())
 
     @classmethod

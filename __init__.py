@@ -13,7 +13,7 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "PromptGenerator": "🎨 Prompt Generator (Qwen)",
-    "StyleApplier": "🎬 Style Applier (Cinematic/Photo)",
+    "StyleApplier": "🎬 Style Applier",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]

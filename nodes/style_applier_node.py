@@ -1,6 +1,6 @@
 """
 Style Applier Node for ComfyUI
-Applies Cinematic or Still Image style keywords to prompts.
+Applies style keywords to prompts using the shared StylePreset system (9 styles).
 """
 
 from typing import Tuple
@@ -8,11 +8,13 @@ from typing import Tuple
 
 class StyleApplierNode:
     """
-    ComfyUI node for applying Cinematic or Still Image style keywords to prompts.
+    ComfyUI node for applying style keywords to prompts.
+
+    Uses the shared StylePreset system with 9 available styles.
 
     Inputs:
         - prompt: Base prompt text
-        - style: "cinematic" or "still_image"
+        - style: One of 9 style presets (e.g. "cinematic", "anime", "cyberpunk")
         - position: Where to add keywords ("prefix", "suffix", or "wrap")
         - emphasis: Optional emphasis level ("low", "medium", "high")
         - include_technical: Include camera/technical specs
