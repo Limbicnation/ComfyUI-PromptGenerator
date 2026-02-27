@@ -71,11 +71,13 @@ class PromptGeneratorNode:
     ComfyUI node for generating Stable Diffusion prompts using Qwen3-8B via Ollama.
 
     Features:
-    - 7 style presets (cinematic, anime, photorealistic, fantasy, abstract, cyberpunk, sci-fi)
+    - 9 style presets loaded from templates.yaml (single source of truth)
     - Temperature and Top-P sampling controls
     - Optional focus area (emphasis) and mood inputs
     - Reasoning toggle to show/hide model's thinking process
     """
+
+    CHUNK_TIMEOUT = 30
 
     # Default style templates (fallback when YAML not available)
     DEFAULT_STYLES = {
@@ -210,6 +212,24 @@ Format the response as a single, detailed sci-fi prompt.""",
             "description": "Minimalist template optimized for WanVideo LoRA",
             "template": "Generate a video prompt for: {{ description }}{% if emphasis %} with focus on {{ emphasis }}{% endif %}{% if mood %}, mood is {{ mood }}{% endif %}",
         },
+        "still_image": {
+            "name": "Still Image (Photography)",
+            "description": "Sharp, realistic photography with technical camera specifications",
+            "template": """Write a detailed Stable Diffusion prompt for: {{ description }}
+
+Style: Generate a professional photography still image with sharp focus.
+{% if emphasis %}Focus particularly on: {{ emphasis }}{% endif %}
+{% if mood %}Mood/Atmosphere: {{ mood }}{% endif %}
+
+Include specific details about:
+- Camera settings (ISO 100, f/2.8 aperture, sharp optics)
+- Natural or studio lighting
+- Realistic textures and fine details
+- Clean, balanced composition
+- Professional photography qualities
+
+Format the response as a single, detailed photography prompt.""",
+        },
     }
 
     # Class-level cache for available models
@@ -265,9 +285,26 @@ Format the response as a single, detailed sci-fi prompt.""",
             return default_models
 
     @classmethod
+    def _get_style_list(cls) -> list:
+        """Get style list from templates.yaml, falling back to DEFAULT_STYLES keys."""
+        template_path = Path(__file__).parent.parent / "config" / "templates.yaml"
+        if YAML_AVAILABLE and template_path.exists():
+            try:
+                with open(template_path, "r") as f:
+                    templates = yaml.safe_load(f)
+                    if templates:
+                        return list(templates.keys())
+            except Exception as e:
+                print(
+                    f"[PromptGenerator] Warning: Failed to load style list from templates.yaml: {e}"
+                )
+        return list(cls.DEFAULT_STYLES.keys())
+
+    @classmethod
     def INPUT_TYPES(cls) -> Dict[str, Any]:
         """Define input parameters for the node."""
         available_models = cls._get_available_models()
+        available_styles = cls._get_style_list()
 
         return {
             "required": {
@@ -280,17 +317,12 @@ Format the response as a single, detailed sci-fi prompt.""",
                     },
                 ),
                 "style": (
-                    [
-                        "cinematic",
-                        "anime",
-                        "photorealistic",
-                        "fantasy",
-                        "abstract",
-                        "cyberpunk",
-                        "sci-fi",
-                        "video_wan",
-                    ],
-                    {"default": "cinematic"},
+                    available_styles,
+                    {
+                        "default": available_styles[0]
+                        if available_styles
+                        else "cinematic"
+                    },
                 ),
                 "model": (
                     available_models,
@@ -395,9 +427,13 @@ Format the response as a single, detailed sci-fi prompt.""",
         mood: Optional[str] = None,
     ) -> str:
         """Render a Jinja2 template with the given variables."""
-        template_data = self.style_templates.get(
-            style, self.DEFAULT_STYLES.get("cinematic")
-        )
+        template_data = self.style_templates.get(style)
+        if template_data is None:
+            print(
+                f"[PromptGenerator] Warning: style '{style}' not found in templates, "
+                f"falling back to 'cinematic'"
+            )
+            template_data = self.DEFAULT_STYLES.get("cinematic")
 
         # Handle YAML format with 'template' key
         if isinstance(template_data, dict) and "template" in template_data:
@@ -484,7 +520,7 @@ Format the response as a single, detailed sci-fi prompt.""",
         chunks = []
         start = time.monotonic()
         first_chunk_timeout = min(timeout * 0.6, 90)
-        chunk_timeout = 30
+        chunk_timeout = self.CHUNK_TIMEOUT
         got_first_chunk = False
 
         try:
@@ -604,7 +640,7 @@ Format the response as a single, detailed sci-fi prompt.""",
             Tuple containing the generated prompt string
         """
         if not description.strip():
-            return ("⚠️ Please enter an image description.",)
+            return ("[PromptGenerator] Please enter an image description.",)
 
         # Render the template
         prompt = self._render_template(
@@ -666,7 +702,7 @@ Format the response as a single, detailed sci-fi prompt.""",
                     print(f"[PromptGenerator] Generated {len(output)} characters")
                     return (output,)
                 else:
-                    return ("⚠️ Generation returned empty result.",)
+                    return ("[PromptGenerator] Generation returned empty result.",)
 
             print("[PromptGenerator] Streaming failed, falling back to subprocess")
 
@@ -680,7 +716,7 @@ Format the response as a single, detailed sci-fi prompt.""",
             )
 
             if result.returncode != 0:
-                return (f"⚠️ Ollama error: {result.stderr}",)
+                return (f"[PromptGenerator] Ollama error: {result.stderr}",)
 
             output = result.stdout.strip()
 
@@ -696,11 +732,13 @@ Format the response as a single, detailed sci-fi prompt.""",
                 )
                 return (output,)
             else:
-                return ("⚠️ Generation returned empty result.",)
+                return ("[PromptGenerator] Generation returned empty result.",)
 
         except subprocess.TimeoutExpired:
-            return (f"⚠️ Generation timed out after {timeout}s",)
+            return (f"[PromptGenerator] Generation timed out after {timeout}s",)
         except FileNotFoundError:
-            return ("⚠️ Ollama not found. Install from: https://ollama.ai",)
+            return (
+                "[PromptGenerator] Ollama not found. Install from: https://ollama.ai",
+            )
         except Exception as e:
-            return (f"⚠️ Error: {str(e)}",)
+            return (f"[PromptGenerator] Error: {str(e)}",)

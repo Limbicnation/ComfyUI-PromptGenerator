@@ -195,6 +195,11 @@ cython_debug/
 .claude/
 AGENTS.md
 
+# Project artifacts
+*.zip
+social/
+code-review-*.md
+
 # PyPI configuration file
 .pypirc
 
