@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ComfyUI custom node that generates Stable Diffusion prompts using Ollama. Users provide a brief description and select a style preset; the node outputs a detailed, optimized prompt. Supports LoRA-enhanced models with automatic discovery and prioritization.
 
-**Current version**: `1.1.7`
+**Current version**: `1.2.0`
 
 ## Architecture
 
