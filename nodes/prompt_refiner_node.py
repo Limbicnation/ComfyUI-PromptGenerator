@@ -73,16 +73,6 @@ Refined prompt:"""
                         "display": "slider",
                     },
                 ),
-                "seed": (
-                    "INT",
-                    {
-                        "default": -1,
-                        "min": -1,
-                        "max": 2**32 - 1,
-                        "step": 1,
-                        "tooltip": "-1 for random, >=0 for deterministic",
-                    },
-                ),
                 "timeout": (
                     "INT",
                     {
@@ -107,7 +97,6 @@ Refined prompt:"""
         model: str,
         passes: int = 1,
         temperature: float = 0.5,
-        seed: int = -1,
         timeout: int = 120,
     ) -> Tuple[str]:
         """
@@ -118,7 +107,6 @@ Refined prompt:"""
             model: Ollama model to use
             passes: Number of refinement iterations (1-3)
             temperature: Generation temperature
-            seed: Random seed for deterministic output (-1 = random)
             timeout: Maximum generation time per pass
 
         Returns:
@@ -147,9 +135,7 @@ Refined prompt:"""
 
             if output is None:
                 # Fallback to subprocess
-                success, output = client.generate_subprocess(
-                    model, refinement, timeout
-                )
+                success, output = client.generate_subprocess(model, refinement, timeout)
                 if not success:
                     return (f"[PromptRefiner] Pass {i + 1} failed: {output}",)
 
@@ -157,7 +143,9 @@ Refined prompt:"""
             cleaned = extract_final_prompt(output.strip())
             if cleaned:
                 current_prompt = cleaned
-                print(f"[PromptRefiner] Pass {i + 1} complete: {len(current_prompt)} chars")
+                print(
+                    f"[PromptRefiner] Pass {i + 1} complete: {len(current_prompt)} chars"
+                )
             else:
                 print(f"[PromptRefiner] Pass {i + 1} returned empty, keeping previous")
 

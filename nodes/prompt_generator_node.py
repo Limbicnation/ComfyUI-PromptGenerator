@@ -4,11 +4,10 @@ Generate detailed Stable Diffusion prompts using Qwen3-8B via Ollama
 """
 
 import re
-import subprocess
-import time
-import threading
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
+
+from .adapters.ollama_client import OllamaClient
 
 # Optional imports with graceful degradation
 try:
@@ -25,21 +24,24 @@ try:
 except ImportError:
     JINJA2_AVAILABLE = False
 
-try:
-    import ollama
-
-    OLLAMA_API_AVAILABLE = True
-except ImportError:
-    OLLAMA_API_AVAILABLE = False
+OLLAMA_API_AVAILABLE = False
+COMFY_PROGRESS_AVAILABLE = False
 
 try:
-    import comfy.utils
+    import importlib.util
 
-    COMFY_PROGRESS_AVAILABLE = True
-except ImportError:
-    COMFY_PROGRESS_AVAILABLE = False
+    if importlib.util.find_spec("ollama") is not None:
+        OLLAMA_API_AVAILABLE = True
+except Exception:
+    pass
 
-from .adapters.ollama_client import OllamaClient
+try:
+    import importlib.util
+
+    if importlib.util.find_spec("comfy") is not None:
+        COMFY_PROGRESS_AVAILABLE = True
+except Exception:
+    pass
 
 
 def extract_final_prompt(text: str) -> str:
@@ -233,10 +235,6 @@ Include specific details about:
 Format the response as a single, detailed photography prompt.""",
         },
     }
-
-    # Class-level cache for available models
-    _cached_models = None
-    _cache_time = 0
 
     def __init__(self):
         """Initialize the node and load style templates."""

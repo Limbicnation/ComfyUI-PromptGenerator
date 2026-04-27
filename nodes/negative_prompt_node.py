@@ -75,6 +75,16 @@ Negative prompt:"""
                         "display": "slider",
                     },
                 ),
+                "top_p": (
+                    "FLOAT",
+                    {
+                        "default": 0.9,
+                        "min": 0.1,
+                        "max": 1.0,
+                        "step": 0.1,
+                        "display": "slider",
+                    },
+                ),
                 "timeout": (
                     "INT",
                     {
@@ -99,6 +109,7 @@ Negative prompt:"""
         style: str,
         model: str,
         temperature: float = 0.3,
+        top_p: float = 0.9,
         timeout: int = 60,
     ) -> Tuple[str]:
         """
@@ -134,7 +145,7 @@ Negative prompt:"""
             model=model,
             prompt=negative_prompt_text,
             temperature=temperature,
-            top_p=0.9,
+            top_p=top_p,
             timeout=timeout,
         )
 

@@ -1,7 +1,7 @@
 """
 Unit tests for style presets and template loading.
 """
-import pytest
+
 from pathlib import Path
 from unittest.mock import patch, mock_open
 
@@ -18,8 +18,15 @@ class TestStylePresets:
     def test_default_styles_keys(self):
         """DEFAULT_STYLES should contain expected style keys."""
         expected = {
-            "cinematic", "anime", "photorealistic", "fantasy",
-            "abstract", "cyberpunk", "sci-fi", "video_wan", "still_image"
+            "cinematic",
+            "anime",
+            "photorealistic",
+            "fantasy",
+            "abstract",
+            "cyberpunk",
+            "sci-fi",
+            "video_wan",
+            "still_image",
         }
         assert set(PromptGeneratorNode.DEFAULT_STYLES.keys()) == expected
 
@@ -27,7 +34,9 @@ class TestStylePresets:
         """Each default style should have a template string."""
         for key, data in PromptGeneratorNode.DEFAULT_STYLES.items():
             assert "template" in data, f"Style '{key}' missing template"
-            assert isinstance(data["template"], str), f"Style '{key}' template not a string"
+            assert isinstance(data["template"], str), (
+                f"Style '{key}' template not a string"
+            )
             assert len(data["template"]) > 0, f"Style '{key}' template is empty"
 
     def test_get_style_list_fallback(self):
@@ -41,10 +50,13 @@ class TestStylePresets:
         mock_yaml = {
             "test_style": {
                 "name": "Test",
-                "template": "Test template for {{ description }}"
+                "template": "Test template for {{ description }}",
             }
         }
-        with patch("builtins.open", mock_open(read_data="test_style:\n  name: Test\n  template: Test template")):
+        with patch(
+            "builtins.open",
+            mock_open(read_data="test_style:\n  name: Test\n  template: Test template"),
+        ):
             with patch.object(Path, "exists", return_value=True):
                 with patch("yaml.safe_load", return_value=mock_yaml):
                     node = PromptGeneratorNode()
@@ -54,10 +66,7 @@ class TestStylePresets:
         """_render_template should substitute Jinja2 variables."""
         node = PromptGeneratorNode()
         result = node._render_template(
-            "cinematic",
-            "a forest",
-            emphasis="lighting",
-            mood="mysterious"
+            "cinematic", "a forest", emphasis="lighting", mood="mysterious"
         )
         assert "a forest" in result
         assert "lighting" in result

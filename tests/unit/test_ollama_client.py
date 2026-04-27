@@ -1,7 +1,7 @@
 """
 Unit tests for OllamaClient adapter.
 """
-import pytest
+
 from unittest.mock import patch, MagicMock
 
 from nodes.adapters.ollama_client import OllamaClient
@@ -27,6 +27,7 @@ class TestOllamaClientDiscovery:
         mock_ollama = MagicMock()
         mock_ollama.list.return_value = {"models": mock_models}
         import nodes.adapters.ollama_client as client_module
+
         orig_ollama = getattr(client_module, "ollama", None)
         orig_available = getattr(client_module, "OLLAMA_API_AVAILABLE", False)
         try:
@@ -52,6 +53,7 @@ class TestOllamaClientDiscovery:
         mock_ollama = MagicMock()
         mock_ollama.list.return_value = {"models": mock_models}
         import nodes.adapters.ollama_client as client_module
+
         orig_ollama = getattr(client_module, "ollama", None)
         orig_available = getattr(client_module, "OLLAMA_API_AVAILABLE", False)
         try:
@@ -89,6 +91,7 @@ class TestOllamaClientHealth:
         mock_ollama.ps.return_value = mock_ps
         mock_ollama.list.return_value = {"models": []}
         import nodes.adapters.ollama_client as client_module
+
         orig_ollama = getattr(client_module, "ollama", None)
         orig_available = getattr(client_module, "OLLAMA_API_AVAILABLE", False)
         try:
@@ -111,6 +114,7 @@ class TestOllamaClientHealth:
         mock_ollama.ps.return_value = mock_ps
         mock_ollama.list.return_value = {"models": []}
         import nodes.adapters.ollama_client as client_module
+
         orig_ollama = getattr(client_module, "ollama", None)
         orig_available = getattr(client_module, "OLLAMA_API_AVAILABLE", False)
         try:
@@ -154,6 +158,7 @@ class TestOllamaClientSubprocess:
     def test_subprocess_timeout(self):
         """Should handle timeout gracefully."""
         from subprocess import TimeoutExpired
+
         with patch("subprocess.run", side_effect=TimeoutExpired("ollama", 30)):
             client = OllamaClient()
             success, output = client.generate_subprocess("qwen3:8b", "prompt", 30)

@@ -1,7 +1,7 @@
 """
 Unit tests for extract_final_prompt utility.
 """
-import pytest
+
 from nodes.prompt_generator_node import extract_final_prompt
 
 
@@ -18,7 +18,9 @@ class TestExtractFinalPrompt:
 
     def test_qwen3_thinking_block(self):
         """Qwen3 thinking blocks should be stripped."""
-        text = "Thinking...\nThis is the reasoning\n...done thinking.\nFinal prompt here"
+        text = (
+            "Thinking...\nThis is the reasoning\n...done thinking.\nFinal prompt here"
+        )
         assert extract_final_prompt(text) == "Final prompt here"
 
     def test_prompt_prefix_removal(self):
@@ -63,11 +65,14 @@ class TestExtractFinalPrompt:
     def test_complex_real_world(self):
         """Complex real-world example with multiple artifacts."""
         text = (
-            'Thinking...\n'
-            'I need to create a cinematic prompt\n'
-            '...done thinking.\n'
-            '**Stable Diffusion Prompt:**\n'
+            "Thinking...\n"
+            "I need to create a cinematic prompt\n"
+            "...done thinking.\n"
+            "**Stable Diffusion Prompt:**\n"
             '"A mystical forest at twilight, dramatic lighting, 8k"\n'
-            'None'
+            "None"
         )
-        assert extract_final_prompt(text) == "A mystical forest at twilight, dramatic lighting, 8k"
+        assert (
+            extract_final_prompt(text)
+            == "A mystical forest at twilight, dramatic lighting, 8k"
+        )

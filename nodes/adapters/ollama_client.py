@@ -9,11 +9,9 @@ Handles:
 - Subprocess fallback when Python API unavailable
 """
 
-import re
 import subprocess
 import time
 import threading
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # Optional imports with graceful degradation
@@ -183,7 +181,9 @@ class OllamaClient:
                 t = threading.Thread(target=_iter_next, args=(it,), daemon=True)
                 t.start()
 
-                wait_time = first_chunk_timeout if not got_first_chunk else chunk_timeout
+                wait_time = (
+                    first_chunk_timeout if not got_first_chunk else chunk_timeout
+                )
                 wait_time = min(wait_time, timeout - elapsed)
                 t.join(timeout=wait_time)
 
