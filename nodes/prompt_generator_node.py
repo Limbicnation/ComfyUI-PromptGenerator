@@ -4,11 +4,10 @@ Generate detailed Stable Diffusion prompts using Qwen3-8B via Ollama
 """
 
 import re
-import subprocess
-import time
-import threading
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
+
+from .adapters.ollama_client import OllamaClient
 
 # Optional imports with graceful degradation
 try:
@@ -25,19 +24,24 @@ try:
 except ImportError:
     JINJA2_AVAILABLE = False
 
-try:
-    import ollama
-
-    OLLAMA_API_AVAILABLE = True
-except ImportError:
-    OLLAMA_API_AVAILABLE = False
+OLLAMA_API_AVAILABLE = False
+COMFY_PROGRESS_AVAILABLE = False
 
 try:
-    import comfy.utils
+    import importlib.util
 
-    COMFY_PROGRESS_AVAILABLE = True
-except ImportError:
-    COMFY_PROGRESS_AVAILABLE = False
+    if importlib.util.find_spec("ollama") is not None:
+        OLLAMA_API_AVAILABLE = True
+except Exception:
+    pass
+
+try:
+    import importlib.util
+
+    if importlib.util.find_spec("comfy") is not None:
+        COMFY_PROGRESS_AVAILABLE = True
+except Exception:
+    pass
 
 
 def extract_final_prompt(text: str) -> str:
@@ -232,57 +236,15 @@ Format the response as a single, detailed photography prompt.""",
         },
     }
 
-    # Class-level cache for available models
-    _cached_models = None
-    _cache_time = 0
-
     def __init__(self):
         """Initialize the node and load style templates."""
         self.style_templates = self._load_templates()
 
     @classmethod
     def _get_available_models(cls) -> list:
-        """
-        Fetch available Ollama models with caching.
-        Prioritizes LoRA-enhanced models (containing 'lora', 'limbicnation', 'fine').
-        """
-        # Cache for 60 seconds
-        if cls._cached_models and (time.time() - cls._cache_time) < 60:
-            return cls._cached_models
-
-        default_models = ["qwen3:8b", "qwen3:4b", "llama3.2:latest"]
-
-        if not OLLAMA_API_AVAILABLE:
-            return default_models
-
-        try:
-            result = ollama.list()
-            models = [
-                m.get("model", "") for m in result.get("models", []) if "model" in m
-            ]
-
-            if not models:
-                return default_models
-
-            # Sort: LoRA/fine-tuned models first, then alphabetically
-            lora_keywords = ["lora", "limbicnation", "fine", "style", "prompt"]
-
-            def sort_key(name):
-                name_lower = name.lower()
-                is_lora = any(kw in name_lower for kw in lora_keywords)
-                return (0 if is_lora else 1, name)
-
-            models = sorted(models, key=sort_key)
-
-            cls._cached_models = models
-            cls._cache_time = time.time()
-
-            print(f"[PromptGenerator] Found {len(models)} Ollama models")
-            return models
-
-        except Exception as e:
-            print(f"[PromptGenerator] Could not fetch models: {e}")
-            return default_models
+        """Fetch available Ollama models via OllamaClient adapter."""
+        client = OllamaClient(logger_prefix="PromptGenerator")
+        return client.discover_models()
 
     @classmethod
     def _get_style_list(cls) -> list:
@@ -471,143 +433,6 @@ Format the response as a single, detailed photography prompt.""",
                 result = re.sub(r"\{% if mood %\}.*?\{% endif %\}", "", result)
             return result
 
-    def _check_ollama_health(self, model: str) -> tuple:
-        """
-        Quick health check: is Ollama running and is the model loaded?
-        Returns (is_healthy, message, is_model_loaded).
-        """
-        if not OLLAMA_API_AVAILABLE:
-            return (False, "Ollama API not available", False)
-
-        try:
-            ollama.list()
-        except Exception as e:
-            return (False, f"Ollama server not reachable: {e}", False)
-
-        try:
-            ps_response = ollama.ps()
-            running_models = [m.model for m in ps_response.models]
-            # Check if our model (or a prefix match) is loaded
-            is_loaded = any(
-                model == rm or model.startswith(rm.split(":")[0])
-                for rm in running_models
-            )
-            if is_loaded:
-                return (True, f"Model '{model}' is loaded in VRAM", True)
-            else:
-                return (
-                    True,
-                    f"Model '{model}' not loaded (cold start expected)",
-                    False,
-                )
-        except Exception:
-            # ps() failed but list() worked - server is up, model status unknown
-            return (True, "Ollama running, model status unknown", False)
-
-    def _generate_with_streaming(
-        self,
-        model: str,
-        prompt: str,
-        temperature: float,
-        top_p: float,
-        timeout: int,
-        pbar: object = None,
-    ) -> Optional[str]:
-        """
-        Stream ollama.generate() with per-chunk and total timeout enforcement.
-        Returns the full response text, or None on failure (caller should fallback).
-        """
-        chunks = []
-        start = time.monotonic()
-        first_chunk_timeout = min(timeout * 0.6, 90)
-        chunk_timeout = self.CHUNK_TIMEOUT
-        got_first_chunk = False
-
-        try:
-            stream = ollama.generate(
-                model=model,
-                prompt=prompt,
-                stream=True,
-                options={"temperature": temperature, "top_p": top_p},
-            )
-
-            # Wrap the iterator so we can enforce per-chunk timeouts
-            # using a background thread that advances the iterator.
-            result_holder: Dict[str, Any] = {}
-
-            def _iter_next(it):
-                """Get next chunk from iterator in a thread."""
-                try:
-                    result_holder["chunk"] = next(it)
-                    result_holder["done"] = False
-                except StopIteration:
-                    result_holder["done"] = True
-                except Exception as exc:
-                    result_holder["error"] = exc
-
-            it = iter(stream)
-            chunk_count = 0
-
-            while True:
-                # Check total timeout
-                elapsed = time.monotonic() - start
-                if elapsed >= timeout:
-                    print(f"[PromptGenerator] Total timeout ({timeout}s) reached")
-                    break
-
-                result_holder.clear()
-                t = threading.Thread(target=_iter_next, args=(it,), daemon=True)
-                t.start()
-
-                wait_time = (
-                    first_chunk_timeout if not got_first_chunk else chunk_timeout
-                )
-                # Don't wait longer than remaining total timeout
-                wait_time = min(wait_time, timeout - elapsed)
-                t.join(timeout=wait_time)
-
-                if t.is_alive():
-                    label = "first chunk" if not got_first_chunk else "chunk"
-                    print(
-                        f"[PromptGenerator] Timeout waiting for {label} ({wait_time:.0f}s)"
-                    )
-                    return None
-
-                if "error" in result_holder:
-                    raise result_holder["error"]
-
-                if result_holder.get("done", False):
-                    break
-
-                chunk = result_holder.get("chunk")
-                if chunk is None:
-                    break
-
-                text = chunk.get("response", "")
-                if text:
-                    chunks.append(text)
-                    got_first_chunk = True
-                    chunk_count += 1
-
-                    # Update progress bar: 5-95 range for streaming
-                    if pbar is not None:
-                        progress = min(5 + int(chunk_count * 2), 95)
-                        pbar.update_absolute(progress)
-
-        except Exception as e:
-            print(f"[PromptGenerator] Streaming error: {e}")
-            return None
-
-        if not chunks:
-            return None
-
-        elapsed = time.monotonic() - start
-        full_text = "".join(chunks)
-        print(
-            f"[PromptGenerator] Streaming complete: {len(full_text)} chars in {elapsed:.1f}s"
-        )
-        return full_text
-
     def generate(
         self,
         description: str,
@@ -655,20 +480,15 @@ Format the response as a single, detailed photography prompt.""",
             f"temp={temperature}, top_p={top_p}, timeout={timeout}s"
         )
 
-        # Initialize progress bar
-        pbar = None
-        if COMFY_PROGRESS_AVAILABLE and unique_id is not None:
-            try:
-                pbar = comfy.utils.ProgressBar(100, node_id=unique_id)
-                pbar.update_absolute(0)
-            except Exception:
-                pbar = None
+        # Initialize OllamaClient adapter and progress bar
+        client = OllamaClient(logger_prefix="PromptGenerator")
+        pbar = client.create_progress_bar(unique_id)
 
         # Use Ollama streaming API if available
         if OLLAMA_API_AVAILABLE:
             # Health check and cold-start detection
             effective_timeout = timeout
-            is_healthy, health_msg, is_model_loaded = self._check_ollama_health(model)
+            is_healthy, health_msg, is_model_loaded = client.check_health(model)
             print(f"[PromptGenerator] Health: {health_msg}")
 
             if pbar is not None:
@@ -681,7 +501,7 @@ Format the response as a single, detailed photography prompt.""",
                     f"[PromptGenerator] Cold start detected, effective timeout: {effective_timeout}s"
                 )
 
-            output = self._generate_with_streaming(
+            output = client.generate_streaming(
                 model=model,
                 prompt=prompt,
                 temperature=temperature,
@@ -707,38 +527,18 @@ Format the response as a single, detailed photography prompt.""",
             print("[PromptGenerator] Streaming failed, falling back to subprocess")
 
         # Fallback to subprocess (no temperature/top_p control)
-        try:
-            result = subprocess.run(
-                ["ollama", "run", model, prompt],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
+        success, output = client.generate_subprocess(model, prompt, timeout)
+        if not success:
+            return (f"[PromptGenerator] {output}",)
 
-            if result.returncode != 0:
-                return (f"[PromptGenerator] Ollama error: {result.stderr}",)
+        if not include_reasoning:
+            output = extract_final_prompt(output)
 
-            output = result.stdout.strip()
+        if pbar is not None:
+            pbar.update_absolute(100)
 
-            if not include_reasoning:
-                output = extract_final_prompt(output)
-
-            if pbar is not None:
-                pbar.update_absolute(100)
-
-            if output:
-                print(
-                    f"[PromptGenerator] Generated {len(output)} characters (subprocess)"
-                )
-                return (output,)
-            else:
-                return ("[PromptGenerator] Generation returned empty result.",)
-
-        except subprocess.TimeoutExpired:
-            return (f"[PromptGenerator] Generation timed out after {timeout}s",)
-        except FileNotFoundError:
-            return (
-                "[PromptGenerator] Ollama not found. Install from: https://ollama.ai",
-            )
-        except Exception as e:
-            return (f"[PromptGenerator] Error: {str(e)}",)
+        if output:
+            print(f"[PromptGenerator] Generated {len(output)} characters (subprocess)")
+            return (output,)
+        else:
+            return ("[PromptGenerator] Generation returned empty result.",)
