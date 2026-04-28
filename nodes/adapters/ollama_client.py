@@ -9,10 +9,13 @@ Handles:
 - Subprocess fallback when Python API unavailable
 """
 
+import logging
 import subprocess
 import time
 import threading
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # Optional imports with graceful degradation
 try:
@@ -45,23 +48,24 @@ class OllamaClient:
     DEFAULT_MODELS = ["qwen3:8b", "qwen3:4b", "llama3.2:latest"]
     LORA_KEYWORDS = ["lora", "limbicnation", "fine", "style", "prompt"]
 
-    # Class-level cache for available models
-    _cached_models: Optional[List[str]] = None
-    _cache_time = 0.0
-
     def __init__(self, logger_prefix: str = "OllamaClient"):
         self.logger_prefix = logger_prefix
+        # Instance-level cache (was class-level, causing race conditions)
+        self._cached_models: Optional[List[str]] = None
+        self._cache_time = 0.0
+        self._cache_lock = threading.Lock()
 
     def _log(self, message: str) -> None:
-        print(f"[{self.logger_prefix}] {message}")
+        logger.info("[%s] %s", self.logger_prefix, message)
 
     def discover_models(self) -> List[str]:
         """
-        Fetch available Ollama models with caching.
+        Fetch available Ollama models with instance-level caching.
         Prioritizes LoRA-enhanced models.
         """
-        if self._cached_models and (time.time() - self._cache_time) < 60:
-            return self._cached_models
+        with self._cache_lock:
+            if self._cached_models and (time.time() - self._cache_time) < 60:
+                return self._cached_models
 
         if not OLLAMA_API_AVAILABLE:
             return self.DEFAULT_MODELS
@@ -82,14 +86,23 @@ class OllamaClient:
 
             models = sorted(models, key=sort_key)
 
-            self._cached_models = models
-            self._cache_time = time.time()
+            with self._cache_lock:
+                self._cached_models = models
+                self._cache_time = time.time()
 
             self._log(f"Found {len(models)} Ollama models")
             return models
 
+        except ConnectionError as e:
+            self._log(f"Could not connect to Ollama: {e}")
+            return self.DEFAULT_MODELS
+        except TimeoutError as e:
+            self._log(f"Model discovery timed out: {e}")
+            return self.DEFAULT_MODELS
+        except (TypeError, AttributeError) as e:
+            raise RuntimeError(f"Ollama API response format changed: {e}") from e
         except Exception as e:
-            self._log(f"Could not fetch models: {e}")
+            self._log(f"Unexpected error fetching models: {e}")
             return self.DEFAULT_MODELS
 
     def check_health(self, model: str) -> Tuple[bool, str, bool]:
@@ -104,8 +117,14 @@ class OllamaClient:
 
         try:
             ollama.list()
-        except Exception as e:
+        except ConnectionError as e:
             return (False, f"Ollama server not reachable: {e}", False)
+        except TimeoutError as e:
+            return (False, f"Ollama health check timed out: {e}", False)
+        except (TypeError, AttributeError) as e:
+            raise RuntimeError(f"Ollama API contract mismatch in health check: {e}") from e
+        except Exception as e:
+            return (False, f"Ollama health check failed: {e}", False)
 
         try:
             ps_response = ollama.ps()
@@ -122,6 +141,8 @@ class OllamaClient:
                     f"Model '{model}' not loaded (cold start expected)",
                     False,
                 )
+        except (TypeError, AttributeError) as e:
+            raise RuntimeError(f"Ollama ps() API changed: {e}") from e
         except Exception:
             return (True, "Ollama running, model status unknown", False)
 
@@ -133,9 +154,13 @@ class OllamaClient:
         top_p: float,
         timeout: int,
         pbar: Optional[Any] = None,
+        seed: Optional[int] = None,
     ) -> Optional[str]:
         """
         Stream ollama.generate() with per-chunk and total timeout enforcement.
+
+        Args:
+            seed: Optional seed for deterministic generation (e.g. PromptRefiner)
 
         Returns:
             Full response text, or None on failure.
@@ -150,11 +175,15 @@ class OllamaClient:
         got_first_chunk = False
 
         try:
+            options: Dict[str, Any] = {"temperature": temperature, "top_p": top_p}
+            if seed is not None:
+                options["seed"] = seed
+
             stream = ollama.generate(
                 model=model,
                 prompt=prompt,
                 stream=True,
-                options={"temperature": temperature, "top_p": top_p},
+                options=options,
             )
 
             result_holder: Dict[str, Any] = {}
@@ -212,9 +241,18 @@ class OllamaClient:
                         progress = min(5 + int(chunk_count * 2), 95)
                         pbar.update_absolute(progress)
 
-        except Exception as e:
-            self._log(f"Streaming error: {e}")
+        except ConnectionError as e:
+            self._log(f"Connection error: {e}")
             return None
+        except TimeoutError as e:
+            self._log(f"Timeout error: {e}")
+            return None
+        except (TypeError, AttributeError) as e:
+            # API contract mismatch — propagate so caller knows the integration broke
+            raise RuntimeError(f"Ollama API contract mismatch: {e}") from e
+        except Exception as e:
+            # Unknown failure — log and propagate with context
+            raise RuntimeError(f"Streaming generation failed: {e}") from e
 
         if not chunks:
             return None

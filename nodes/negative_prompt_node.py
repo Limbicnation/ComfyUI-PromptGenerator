@@ -3,10 +3,13 @@ Negative Prompt Generator Node for ComfyUI
 Generates negative prompts from positive prompts using style-aware templates.
 """
 
+import logging
 from typing import Any, Dict, Tuple
 
 from .adapters.ollama_client import OllamaClient
 from .prompt_generator_node import extract_final_prompt
+
+logger = logging.getLogger(__name__)
 
 
 class NegativePromptNode:
@@ -138,7 +141,7 @@ Negative prompt:"""
             style_hints=style_hints,
         )
 
-        print(f"[NegativePrompt] Generating negative for style='{style}'")
+        logger.info("Generating negative for style='%s'", style)
 
         # Generate via streaming
         output = client.generate_streaming(
@@ -160,9 +163,9 @@ Negative prompt:"""
         # Clean the output
         negative = extract_final_prompt(output.strip())
         if negative:
-            print(f"[NegativePrompt] Generated {len(negative)} characters")
+            logger.info("Generated %d characters", len(negative))
             return (negative,)
         else:
             # Fallback to static hints if LLM fails
-            print("[NegativePrompt] LLM returned empty, using static hints")
+            logger.warning("LLM returned empty, using static hints")
             return (style_hints,)

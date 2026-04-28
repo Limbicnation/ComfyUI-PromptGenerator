@@ -193,27 +193,34 @@ class PromptCombinerNode:
 
     def _weighted_average(self, prompts: List[Tuple[str, float]]) -> str:
         """
-        Weighted text combination.
-        Prompts with higher weights appear earlier and more frequently.
+        Weighted text combination using emphasis markers.
+        Higher-weighted prompts receive stronger ComfyUI emphasis parentheses.
         """
         total_weight = sum(w for _, w in prompts)
         if total_weight == 0:
             return ", ".join(p[0] for p in prompts)
 
-        # Build output with weighted repetition
+        # Normalize weights relative to average
+        avg_weight = total_weight / len(prompts)
+
         parts = []
         for text, weight in prompts:
-            # Repeat prompt proportionally to its weight
-            repeats = max(1, int((weight / total_weight) * 3))
-            for _ in range(repeats):
+            # Compute emphasis level based on weight ratio to average
+            ratio = weight / avg_weight if avg_weight > 0 else 1.0
+            if ratio >= 2.0:
+                # Strong emphasis: triple parens
+                parts.append(f"((({text})))")
+            elif ratio >= 1.5:
+                # High emphasis: double parens
+                parts.append(f"(({text}))")
+            elif ratio >= 1.2:
+                # Moderate emphasis: single parens
+                parts.append(f"({text})")
+            elif ratio <= 0.5:
+                # De-emphasis: square brackets
+                parts.append(f"[{text}]")
+            else:
+                # Neutral: no markers
                 parts.append(text)
 
-        # Deduplicate while preserving order
-        seen = set()
-        result = []
-        for part in parts:
-            if part not in seen:
-                seen.add(part)
-                result.append(part)
-
-        return ", ".join(result)
+        return ", ".join(parts)
