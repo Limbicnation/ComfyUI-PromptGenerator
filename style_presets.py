@@ -14,7 +14,6 @@ Usage in ComfyUI nodes:
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 from enum import Enum
 
 
@@ -36,32 +35,20 @@ class StyleMode(Enum):
 class StyleKeywords:
     """Container for style-specific keywords and descriptors."""
 
-    primary: List[str] = field(default_factory=list)
-    lighting: List[str] = field(default_factory=list)
-    technical: List[str] = field(default_factory=list)
-    composition: List[str] = field(default_factory=list)
-    texture: List[str] = field(default_factory=list)
+    primary: list[str] = field(default_factory=list)
+    lighting: list[str] = field(default_factory=list)
+    technical: list[str] = field(default_factory=list)
+    composition: list[str] = field(default_factory=list)
+    texture: list[str] = field(default_factory=list)
 
     def to_prompt_string(self, separator: str = ", ") -> str:
         """Convert all keywords to a single prompt string."""
-        all_keywords = (
-            self.primary
-            + self.lighting
-            + self.technical
-            + self.composition
-            + self.texture
-        )
+        all_keywords = self.primary + self.lighting + self.technical + self.composition + self.texture
         return separator.join(all_keywords)
 
-    def to_list(self) -> List[str]:
+    def to_list(self) -> list[str]:
         """Return all keywords as a flat list (ComfyUI-compatible)."""
-        return (
-            self.primary
-            + self.lighting
-            + self.technical
-            + self.composition
-            + self.texture
-        )
+        return self.primary + self.lighting + self.technical + self.composition + self.texture
 
 
 @dataclass
@@ -74,7 +61,7 @@ class StyleDefinition:
 
 
 # Style definitions - single source of truth
-STYLE_DEFINITIONS: Dict[StyleMode, StyleDefinition] = {
+STYLE_DEFINITIONS: dict[StyleMode, StyleDefinition] = {
     StyleMode.CINEMATIC: StyleDefinition(
         name="Cinematic",
         description="Film-like visuals with dramatic lighting and anamorphic qualities",
@@ -333,12 +320,12 @@ def get_style_keywords(style: str) -> StyleKeywords:
     try:
         mode = StyleMode(style.lower())
         return STYLE_DEFINITIONS[mode].keywords
-    except ValueError:
+    except ValueError as err:
         available = [s.value for s in StyleMode]
-        raise ValueError(f"Unknown style '{style}'. Available: {', '.join(available)}")
+        raise ValueError(f"Unknown style '{style}'. Available: {', '.join(available)}") from err
 
 
-def get_available_styles() -> List[str]:
+def get_available_styles() -> list[str]:
     """Get list of available style names."""
     return [mode.value for mode in StyleMode]
 
@@ -350,17 +337,15 @@ class StylePreset:
         self._styles = STYLE_DEFINITIONS
 
     @staticmethod
-    def get_style_choices() -> Tuple[str, ...]:
+    def get_style_choices() -> tuple[str, ...]:
         """Get available style choices as tuple (ComfyUI dropdown format)."""
         return tuple(mode.value for mode in StyleMode)
 
-    def get_style_keywords(self, style: str) -> List[str]:
+    def get_style_keywords(self, style: str) -> list[str]:
         """Get style keywords as a list."""
         return get_style_keywords(style).to_list()
 
-    def get_style_prompt(
-        self, style: str, emphasis: Optional[str] = None, include_technical: bool = True
-    ) -> str:
+    def get_style_prompt(self, style: str, emphasis: str | None = None, include_technical: bool = True) -> str:
         """Get a formatted style prompt string."""
         keywords = get_style_keywords(style)
 
@@ -380,11 +365,11 @@ class StylePreset:
 
 
 __all__ = [
-    "StyleMode",
-    "StyleKeywords",
-    "StyleDefinition",
-    "StylePreset",
-    "get_style_keywords",
-    "get_available_styles",
     "STYLE_DEFINITIONS",
+    "StyleDefinition",
+    "StyleKeywords",
+    "StyleMode",
+    "StylePreset",
+    "get_available_styles",
+    "get_style_keywords",
 ]

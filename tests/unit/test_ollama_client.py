@@ -2,7 +2,7 @@
 Unit tests for OllamaClient adapter.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from nodes.adapters.ollama_client import OllamaClient
 
@@ -33,8 +33,8 @@ class TestOllamaClientDiscovery:
         try:
             client_module.ollama = mock_ollama
             client_module.OLLAMA_API_AVAILABLE = True
-            OllamaClient._cached_models = None
-            OllamaClient._cache_time = 0
+            client_module._MODEL_CACHE = None
+            client_module._CACHE_TIME = 0
             client = OllamaClient()
             models = client.discover_models()
             # Both LoRA models should be first (sorted alphabetically within LoRA group)
@@ -44,8 +44,8 @@ class TestOllamaClientDiscovery:
         finally:
             client_module.ollama = orig_ollama
             client_module.OLLAMA_API_AVAILABLE = orig_available
-            OllamaClient._cached_models = None
-            OllamaClient._cache_time = 0
+            client_module._MODEL_CACHE = None
+            client_module._CACHE_TIME = 0
 
     def test_caching(self):
         """Second call should return cached results within 60s."""
@@ -59,8 +59,8 @@ class TestOllamaClientDiscovery:
         try:
             client_module.ollama = mock_ollama
             client_module.OLLAMA_API_AVAILABLE = True
-            OllamaClient._cached_models = None
-            OllamaClient._cache_time = 0
+            client_module._MODEL_CACHE = None
+            client_module._CACHE_TIME = 0
             client = OllamaClient()
             _ = client.discover_models()
             _ = client.discover_models()
@@ -68,8 +68,33 @@ class TestOllamaClientDiscovery:
         finally:
             client_module.ollama = orig_ollama
             client_module.OLLAMA_API_AVAILABLE = orig_available
-            OllamaClient._cached_models = None
-            OllamaClient._cache_time = 0
+            client_module._MODEL_CACHE = None
+            client_module._CACHE_TIME = 0
+
+    def test_cache_shared_across_instances(self):
+        """Module-level cache should be shared between OllamaClient instances."""
+        mock_models = [{"model": "qwen3:8b"}]
+        mock_ollama = MagicMock()
+        mock_ollama.list.return_value = {"models": mock_models}
+        import nodes.adapters.ollama_client as client_module
+
+        orig_ollama = getattr(client_module, "ollama", None)
+        orig_available = getattr(client_module, "OLLAMA_API_AVAILABLE", False)
+        try:
+            client_module.ollama = mock_ollama
+            client_module.OLLAMA_API_AVAILABLE = True
+            client_module._MODEL_CACHE = None
+            client_module._CACHE_TIME = 0
+            client1 = OllamaClient()
+            client2 = OllamaClient()
+            _ = client1.discover_models()
+            _ = client2.discover_models()
+            mock_ollama.list.assert_called_once()  # Shared cache
+        finally:
+            client_module.ollama = orig_ollama
+            client_module.OLLAMA_API_AVAILABLE = orig_available
+            client_module._MODEL_CACHE = None
+            client_module._CACHE_TIME = 0
 
 
 class TestOllamaClientHealth:
@@ -79,7 +104,7 @@ class TestOllamaClientHealth:
         """Should report unhealthy when ollama package missing."""
         with patch("nodes.adapters.ollama_client.OLLAMA_API_AVAILABLE", False):
             client = OllamaClient()
-            healthy, msg, loaded = client.check_health("qwen3:8b")
+            healthy, msg, _loaded = client.check_health("qwen3:8b")
             assert healthy is False
             assert "not available" in msg
 
@@ -125,6 +150,28 @@ class TestOllamaClientHealth:
             assert healthy is True
             assert loaded is False
             assert "cold start" in msg
+        finally:
+            client_module.ollama = orig_ollama
+            client_module.OLLAMA_API_AVAILABLE = orig_available
+
+    def test_exact_tag_match_no_prefix_conflation(self):
+        """qwen3:4b should NOT report loaded when only qwen3:8b is in VRAM."""
+        mock_ps = MagicMock()
+        mock_ps.models = [MagicMock(model="qwen3:8b")]
+        mock_ollama = MagicMock()
+        mock_ollama.ps.return_value = mock_ps
+        mock_ollama.list.return_value = {"models": []}
+        import nodes.adapters.ollama_client as client_module
+
+        orig_ollama = getattr(client_module, "ollama", None)
+        orig_available = getattr(client_module, "OLLAMA_API_AVAILABLE", False)
+        try:
+            client_module.ollama = mock_ollama
+            client_module.OLLAMA_API_AVAILABLE = True
+            client = OllamaClient()
+            healthy, _msg, loaded = client.check_health("qwen3:4b")
+            assert healthy is True
+            assert loaded is False
         finally:
             client_module.ollama = orig_ollama
             client_module.OLLAMA_API_AVAILABLE = orig_available

@@ -11,11 +11,16 @@ Handles:
 
 import logging
 import subprocess
-import time
 import threading
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
+
+# Module-level shared cache (thread-safe across OllamaClient instances)
+_MODEL_CACHE: list[str] | None = None
+_CACHE_TIME: float = 0.0
+_CACHE_LOCK = threading.Lock()
 
 # Optional imports with graceful degradation
 try:
@@ -45,50 +50,46 @@ class OllamaClient:
     """
 
     CHUNK_TIMEOUT = 30
-    DEFAULT_MODELS = ["qwen3:8b", "qwen3:4b", "llama3.2:latest"]
-    LORA_KEYWORDS = ["lora", "limbicnation", "fine", "style", "prompt"]
+    DEFAULT_MODELS: ClassVar[list[str]] = ["qwen3:8b", "qwen3:4b", "llama3.2:latest"]
+    LORA_KEYWORDS: ClassVar[list[str]] = ["lora", "limbicnation", "fine", "style", "prompt"]
 
     def __init__(self, logger_prefix: str = "OllamaClient"):
         self.logger_prefix = logger_prefix
-        # Instance-level cache (was class-level, causing race conditions)
-        self._cached_models: Optional[List[str]] = None
-        self._cache_time = 0.0
-        self._cache_lock = threading.Lock()
 
     def _log(self, message: str) -> None:
         logger.info("[%s] %s", self.logger_prefix, message)
 
-    def discover_models(self) -> List[str]:
+    def discover_models(self) -> list[str]:
         """
-        Fetch available Ollama models with instance-level caching.
+        Fetch available Ollama models with module-level caching.
         Prioritizes LoRA-enhanced models.
         """
-        with self._cache_lock:
-            if self._cached_models and (time.time() - self._cache_time) < 60:
-                return self._cached_models
+        global _MODEL_CACHE, _CACHE_TIME
+
+        with _CACHE_LOCK:
+            if _MODEL_CACHE and (time.time() - _CACHE_TIME) < 60:
+                return _MODEL_CACHE.copy()
 
         if not OLLAMA_API_AVAILABLE:
             return self.DEFAULT_MODELS
 
         try:
             result = ollama.list()
-            models = [
-                m.get("model", "") for m in result.get("models", []) if "model" in m
-            ]
+            models = [m.get("model", "") for m in result.get("models", []) if "model" in m]
 
             if not models:
                 return self.DEFAULT_MODELS
 
-            def sort_key(name: str) -> Tuple[int, str]:
+            def sort_key(name: str) -> tuple[int, str]:
                 name_lower = name.lower()
                 is_lora = any(kw in name_lower for kw in self.LORA_KEYWORDS)
                 return (0 if is_lora else 1, name)
 
             models = sorted(models, key=sort_key)
 
-            with self._cache_lock:
-                self._cached_models = models
-                self._cache_time = time.time()
+            with _CACHE_LOCK:
+                _MODEL_CACHE = models
+                _CACHE_TIME = time.time()
 
             self._log(f"Found {len(models)} Ollama models")
             return models
@@ -105,7 +106,7 @@ class OllamaClient:
             self._log(f"Unexpected error fetching models: {e}")
             return self.DEFAULT_MODELS
 
-    def check_health(self, model: str) -> Tuple[bool, str, bool]:
+    def check_health(self, model: str) -> tuple[bool, str, bool]:
         """
         Quick health check: is Ollama running and is the model loaded?
 
@@ -129,10 +130,8 @@ class OllamaClient:
         try:
             ps_response = ollama.ps()
             running_models = [m.model for m in ps_response.models]
-            is_loaded = any(
-                model == rm or model.startswith(rm.split(":")[0])
-                for rm in running_models
-            )
+            # Exact match only; do not conflate different tags (e.g. qwen3:8b vs qwen3:4b)
+            is_loaded = model in running_models
             if is_loaded:
                 return (True, f"Model '{model}' is loaded in VRAM", True)
             else:
@@ -153,9 +152,9 @@ class OllamaClient:
         temperature: float,
         top_p: float,
         timeout: int,
-        pbar: Optional[Any] = None,
-        seed: Optional[int] = None,
-    ) -> Optional[str]:
+        pbar: Any | None = None,
+        seed: int | None = None,
+    ) -> str | None:
         """
         Stream ollama.generate() with per-chunk and total timeout enforcement.
 
@@ -168,14 +167,14 @@ class OllamaClient:
         if not OLLAMA_API_AVAILABLE:
             return None
 
-        chunks: List[str] = []
+        chunks: list[str] = []
         start = time.monotonic()
         first_chunk_timeout = min(timeout * 0.6, 90)
         chunk_timeout = self.CHUNK_TIMEOUT
         got_first_chunk = False
 
         try:
-            options: Dict[str, Any] = {"temperature": temperature, "top_p": top_p}
+            options: dict[str, Any] = {"temperature": temperature, "top_p": top_p}
             if seed is not None:
                 options["seed"] = seed
 
@@ -186,7 +185,7 @@ class OllamaClient:
                 options=options,
             )
 
-            result_holder: Dict[str, Any] = {}
+            result_holder: dict[str, Any] = {}
 
             def _iter_next(it):
                 try:
@@ -210,9 +209,7 @@ class OllamaClient:
                 t = threading.Thread(target=_iter_next, args=(it,), daemon=True)
                 t.start()
 
-                wait_time = (
-                    first_chunk_timeout if not got_first_chunk else chunk_timeout
-                )
+                wait_time = first_chunk_timeout if not got_first_chunk else chunk_timeout
                 wait_time = min(wait_time, timeout - elapsed)
                 t.join(timeout=wait_time)
 
@@ -267,7 +264,7 @@ class OllamaClient:
         model: str,
         prompt: str,
         timeout: int,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         Fallback generation via subprocess call to ollama CLI.
 
@@ -297,9 +294,9 @@ class OllamaClient:
         except FileNotFoundError:
             return (False, "Ollama not found. Install from: https://ollama.ai")
         except Exception as e:
-            return (False, f"Error: {str(e)}")
+            return (False, f"Error: {e!s}")
 
-    def create_progress_bar(self, unique_id: Optional[str] = None) -> Optional[Any]:
+    def create_progress_bar(self, unique_id: str | None = None) -> Any | None:
         """Create a ComfyUI progress bar if available."""
         if COMFY_PROGRESS_AVAILABLE and unique_id is not None:
             try:

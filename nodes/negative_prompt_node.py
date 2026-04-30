@@ -4,7 +4,7 @@ Generates negative prompts from positive prompts using style-aware templates.
 """
 
 import logging
-from typing import Any, Dict, Tuple
+from typing import Any, ClassVar
 
 from .adapters.ollama_client import OllamaClient
 from .prompt_generator_node import extract_final_prompt
@@ -33,7 +33,7 @@ Focus on common artifacts for this style: {style_hints}
 
 Negative prompt:"""
 
-    STYLE_HINTS = {
+    STYLE_HINTS: ClassVar[dict[str, str]] = {
         "cinematic": "blurry, overexposed, underexposed, shaky cam, lens flare abuse, bad CGI",
         "anime": "3d render, realistic, western cartoon, bad anatomy, extra limbs, deformed",
         "photorealistic": "painting, illustration, cartoon, oversaturated, artificial look",
@@ -46,7 +46,7 @@ Negative prompt:"""
     }
 
     @classmethod
-    def INPUT_TYPES(cls) -> Dict[str, Any]:
+    def INPUT_TYPES(cls) -> dict[str, Any]:
         styles = list(cls.STYLE_HINTS.keys())
         return {
             "required": {
@@ -114,7 +114,7 @@ Negative prompt:"""
         temperature: float = 0.3,
         top_p: float = 0.9,
         timeout: int = 60,
-    ) -> Tuple[str]:
+    ) -> tuple[str]:
         """
         Generate a negative prompt from a positive prompt.
 
@@ -154,9 +154,7 @@ Negative prompt:"""
 
         if output is None:
             # Fallback to subprocess
-            success, output = client.generate_subprocess(
-                model, negative_prompt_text, timeout
-            )
+            success, output = client.generate_subprocess(model, negative_prompt_text, timeout)
             if not success:
                 return (f"[NegativePrompt] Generation failed: {output}",)
 

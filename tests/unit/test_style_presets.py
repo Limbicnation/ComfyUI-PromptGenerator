@@ -3,7 +3,7 @@ Unit tests for style presets and template loading.
 """
 
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open, patch
 
 from nodes.prompt_generator_node import PromptGeneratorNode
 
@@ -34,9 +34,7 @@ class TestStylePresets:
         """Each default style should have a template string."""
         for key, data in PromptGeneratorNode.DEFAULT_STYLES.items():
             assert "template" in data, f"Style '{key}' missing template"
-            assert isinstance(data["template"], str), (
-                f"Style '{key}' template not a string"
-            )
+            assert isinstance(data["template"], str), f"Style '{key}' template not a string"
             assert len(data["template"]) > 0, f"Style '{key}' template is empty"
 
     def test_get_style_list_fallback(self):
@@ -53,21 +51,21 @@ class TestStylePresets:
                 "template": "Test template for {{ description }}",
             }
         }
-        with patch(
-            "builtins.open",
-            mock_open(read_data="test_style:\n  name: Test\n  template: Test template"),
+        with (
+            patch(
+                "builtins.open",
+                mock_open(read_data="test_style:\n  name: Test\n  template: Test template"),
+            ),
+            patch.object(Path, "exists", return_value=True),
+            patch("yaml.safe_load", return_value=mock_yaml),
         ):
-            with patch.object(Path, "exists", return_value=True):
-                with patch("yaml.safe_load", return_value=mock_yaml):
-                    node = PromptGeneratorNode()
-                    assert "test_style" in node.style_templates
+            node = PromptGeneratorNode()
+            assert "test_style" in node.style_templates
 
     def test_render_template_jinja2(self):
         """_render_template should substitute Jinja2 variables."""
         node = PromptGeneratorNode()
-        result = node._render_template(
-            "cinematic", "a forest", emphasis="lighting", mood="mysterious"
-        )
+        result = node._render_template("cinematic", "a forest", emphasis="lighting", mood="mysterious")
         assert "a forest" in result
         assert "lighting" in result
         assert "mysterious" in result

@@ -1,0 +1,16 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.11
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: version-tag-guard
+        name: Refuse pyproject.toml version bump without matching git tag
+        language: system
+        entry: python scripts/check_version_tag.py
+        files: ^pyproject\.toml$
+        pass_filenames: false
