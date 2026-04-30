@@ -167,14 +167,14 @@ class PromptCombinerNode:
         if not prompts:
             return ("[PromptCombiner] At least one prompt is required.",)
 
-        if len(prompts) == 1:
-            return (prompts[0][0],)
-
         try:
             selected = CombineMode(mode)
         except ValueError:
             valid = ", ".join(m.value for m in CombineMode)
             return (f"[PromptCombiner] Unknown mode {mode!r}. Valid: {valid}",)
+
+        if len(prompts) == 1:
+            return (prompts[0][0],)
 
         match selected:
             case CombineMode.BLEND:

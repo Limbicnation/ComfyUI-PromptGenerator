@@ -159,6 +159,9 @@ Refined prompt:"""
             # Build refinement prompt
             refinement = self.REFINEMENT_PROMPT.format(prompt=current_prompt)
 
+            # Derive per-pass seed so multi-pass refinement isn't a no-op
+            pass_seed = None if effective_seed is None else effective_seed + i
+
             # Generate refined version
             output = client.generate_streaming(
                 model=model,
@@ -167,7 +170,7 @@ Refined prompt:"""
                 top_p=top_p,
                 timeout=timeout,
                 pbar=pbar,
-                seed=effective_seed,
+                seed=pass_seed,
             )
 
             if output is None:

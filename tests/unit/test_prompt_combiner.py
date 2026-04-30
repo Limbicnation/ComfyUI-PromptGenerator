@@ -98,3 +98,7 @@ class TestUnknownMode:
         (out,) = node.combine(prompt_1="x", prompt_2="y", mode="not_a_real_mode")  # type: ignore[arg-type]
         assert "Unknown mode" in out
         assert "blend" in out  # mentions valid options
+
+    def test_unknown_mode_with_single_prompt_still_validated(self, node: PromptCombinerNode) -> None:
+        (out,) = node.combine(prompt_1="x", mode="not_a_real_mode")  # type: ignore[arg-type]
+        assert "Unknown mode" in out

@@ -71,3 +71,28 @@ class TestExtractFinalPrompt:
             "None"
         )
         assert extract_final_prompt(text) == "A mystical forest at twilight, dramatic lighting, 8k"
+
+    def test_deepseek_think_block(self):
+        """DeepSeek / generic XML <think> blocks should be stripped."""
+        text = "<think>Some reasoning here</think>Final prompt here"
+        assert extract_final_prompt(text) == "Final prompt here"
+
+    def test_deepseek_think_multiline(self):
+        """Multiline <think> blocks should be stripped."""
+        text = "<think>\nReasoning line 1\nReasoning line 2\n</think>\nFinal prompt"
+        assert extract_final_prompt(text) == "Final prompt"
+
+    def test_markdown_details_block(self):
+        """Markdown <details> blocks should be stripped."""
+        text = "<details><summary>Reasoning</summary>Hidden reasoning</details>Final prompt"
+        assert extract_final_prompt(text) == "Final prompt"
+
+    def test_mixed_reasoning_formats(self):
+        """Multiple reasoning formats in one string should all be removed."""
+        text = (
+            "<think>DeepSeek reasoning</think>\n"
+            "Thinking...\nQwen reasoning\n...done thinking.\n"
+            "<details><summary>Summary</summary>Details</details>\n"
+            "Final clean prompt"
+        )
+        assert extract_final_prompt(text) == "Final clean prompt"

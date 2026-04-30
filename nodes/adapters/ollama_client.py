@@ -17,6 +17,11 @@ from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
+# Module-level shared cache (thread-safe across OllamaClient instances)
+_MODEL_CACHE: list[str] | None = None
+_CACHE_TIME: float = 0.0
+_CACHE_LOCK = threading.Lock()
+
 # Optional imports with graceful degradation
 try:
     import ollama
@@ -50,22 +55,20 @@ class OllamaClient:
 
     def __init__(self, logger_prefix: str = "OllamaClient"):
         self.logger_prefix = logger_prefix
-        # Instance-level cache (was class-level, causing race conditions)
-        self._cached_models: list[str] | None = None
-        self._cache_time = 0.0
-        self._cache_lock = threading.Lock()
 
     def _log(self, message: str) -> None:
         logger.info("[%s] %s", self.logger_prefix, message)
 
     def discover_models(self) -> list[str]:
         """
-        Fetch available Ollama models with instance-level caching.
+        Fetch available Ollama models with module-level caching.
         Prioritizes LoRA-enhanced models.
         """
-        with self._cache_lock:
-            if self._cached_models and (time.time() - self._cache_time) < 60:
-                return self._cached_models
+        global _MODEL_CACHE, _CACHE_TIME
+
+        with _CACHE_LOCK:
+            if _MODEL_CACHE and (time.time() - _CACHE_TIME) < 60:
+                return _MODEL_CACHE.copy()
 
         if not OLLAMA_API_AVAILABLE:
             return self.DEFAULT_MODELS
@@ -84,9 +87,9 @@ class OllamaClient:
 
             models = sorted(models, key=sort_key)
 
-            with self._cache_lock:
-                self._cached_models = models
-                self._cache_time = time.time()
+            with _CACHE_LOCK:
+                _MODEL_CACHE = models
+                _CACHE_TIME = time.time()
 
             self._log(f"Found {len(models)} Ollama models")
             return models
@@ -127,7 +130,8 @@ class OllamaClient:
         try:
             ps_response = ollama.ps()
             running_models = [m.model for m in ps_response.models]
-            is_loaded = any(model == rm or model.startswith(rm.split(":")[0]) for rm in running_models)
+            # Exact match only; do not conflate different tags (e.g. qwen3:8b vs qwen3:4b)
+            is_loaded = model in running_models
             if is_loaded:
                 return (True, f"Model '{model}' is loaded in VRAM", True)
             else:

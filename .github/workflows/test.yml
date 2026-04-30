@@ -72,23 +72,4 @@ jobs:
         run: |
           comfy --skip-prompt node validate
 
-  verify-tag-exists:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code (with full tag history)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Require matching git tag for current pyproject.toml version
-        run: |
-          VERSION=$(python -c 'import tomllib, pathlib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')
-          if ! git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
-            echo "::error::pyproject.toml is at v${VERSION} but no matching git tag exists. Tag the release before merging the bump to main."
-            exit 1
-          fi
-          echo "OK: git tag v${VERSION} exists."
+

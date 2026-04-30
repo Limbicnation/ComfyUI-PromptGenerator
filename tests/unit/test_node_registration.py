@@ -9,13 +9,22 @@ from __future__ import annotations
 
 import importlib.util
 import pkgutil
+import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import pytest
 
-import nodes
+# Guarantee we import the local nodes/ package, not a system-wide ComfyUI nodes package.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_NODES_PKG = _REPO_ROOT / "nodes"
+if str(_NODES_PKG) not in sys.path:
+    sys.path.insert(0, str(_NODES_PKG))
+
+import nodes  # noqa: E402
+
+assert nodes.__file__.startswith(str(_REPO_ROOT)), f"Imported wrong nodes package: {nodes.__file__}"
 
 EXPECTED_NODES: frozenset[str] = frozenset(
     {

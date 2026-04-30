@@ -52,8 +52,12 @@ def extract_final_prompt(text: str) -> str:
     if not text:
         return text
 
-    # Remove Qwen3 thinking blocks: "Thinking...\n...\n...done thinking.\n"
+    # DeepSeek / generic XML thinking blocks
+    text = re.sub(r"<think[\s\S]*?</think>", "", text, flags=re.DOTALL)
+    # Qwen3 thinking blocks: "Thinking...\n...\n...done thinking.\n"
     text = re.sub(r"Thinking\.\.\.[\s\S]*?\.\.\.done thinking\.[\s]*", "", text, flags=re.DOTALL)
+    # Markdown details blocks
+    text = re.sub(r"<details>\s*<summary>.*?</summary>[\s\S]*?</details>", "", text, flags=re.DOTALL)
 
     # Remove common prefixes like "**Prompt:**" or "**Stable Diffusion Prompt:**"
     text = re.sub(r"\*\*(?:Stable Diffusion )?Prompt:\*\*\s*", "", text)
