@@ -48,4 +48,10 @@ jobs:
         env:
           REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
         run: |
-          comfy --skip-prompt node publish --confirm
+          if [ -z "$REGISTRY_ACCESS_TOKEN" ]; then
+            echo "::error::REGISTRY_ACCESS_TOKEN secret is not set on this repository."
+            echo "Create a Personal Access Token at https://registry.comfy.org/ (Settings → Create new token)"
+            echo "then add it via: gh secret set REGISTRY_ACCESS_TOKEN --body '<token>'"
+            exit 1
+          fi
+          comfy --skip-prompt node publish --token "$REGISTRY_ACCESS_TOKEN"
