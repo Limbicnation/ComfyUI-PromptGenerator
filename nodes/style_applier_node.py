@@ -3,8 +3,6 @@ Style Applier Node for ComfyUI
 Applies style keywords to prompts using the shared StylePreset system (9 styles).
 """
 
-from typing import Tuple
-
 
 class StyleApplierNode:
     """
@@ -66,7 +64,7 @@ class StyleApplierNode:
         position: str = "suffix",
         emphasis: str = "medium",
         include_technical: bool = True,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """Apply style keywords to a prompt."""
         from style_presets import StylePreset
 

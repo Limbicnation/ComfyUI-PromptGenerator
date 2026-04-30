@@ -2,7 +2,7 @@
 Unit tests for OllamaClient adapter.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from nodes.adapters.ollama_client import OllamaClient
 
@@ -79,7 +79,7 @@ class TestOllamaClientHealth:
         """Should report unhealthy when ollama package missing."""
         with patch("nodes.adapters.ollama_client.OLLAMA_API_AVAILABLE", False):
             client = OllamaClient()
-            healthy, msg, loaded = client.check_health("qwen3:8b")
+            healthy, msg, _loaded = client.check_health("qwen3:8b")
             assert healthy is False
             assert "not available" in msg
 

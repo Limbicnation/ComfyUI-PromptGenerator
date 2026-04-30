@@ -4,7 +4,7 @@ Refines a raw prompt through iterative LLM passes for higher quality output.
 """
 
 import logging
-from typing import Any, Dict, Tuple, Optional
+from typing import Any
 
 from .adapters.ollama_client import OllamaClient
 from .prompt_generator_node import extract_final_prompt
@@ -36,7 +36,7 @@ Original prompt: {prompt}
 Refined prompt:"""
 
     @classmethod
-    def INPUT_TYPES(cls) -> Dict[str, Any]:
+    def INPUT_TYPES(cls) -> dict[str, Any]:
         return {
             "required": {
                 "prompt": (
@@ -122,8 +122,8 @@ Refined prompt:"""
         top_p: float = 0.9,
         seed: int = -1,
         timeout: int = 120,
-        unique_id: Optional[str] = None,
-    ) -> Tuple[str]:
+        unique_id: str | None = None,
+    ) -> tuple[str]:
         """
         Refine a prompt through iterative LLM passes.
 
@@ -147,7 +147,7 @@ Refined prompt:"""
         current_prompt = prompt.strip()
 
         # Determine effective seed
-        effective_seed: Optional[int] = None if seed == -1 else seed
+        effective_seed: int | None = None if seed == -1 else seed
 
         for i in range(passes):
             logger.info("Pass %d/%d with model='%s'", i + 1, passes, model)

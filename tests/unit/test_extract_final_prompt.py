@@ -18,9 +18,7 @@ class TestExtractFinalPrompt:
 
     def test_qwen3_thinking_block(self):
         """Qwen3 thinking blocks should be stripped."""
-        text = (
-            "Thinking...\nThis is the reasoning\n...done thinking.\nFinal prompt here"
-        )
+        text = "Thinking...\nThis is the reasoning\n...done thinking.\nFinal prompt here"
         assert extract_final_prompt(text) == "Final prompt here"
 
     def test_prompt_prefix_removal(self):
@@ -72,7 +70,4 @@ class TestExtractFinalPrompt:
             '"A mystical forest at twilight, dramatic lighting, 8k"\n'
             "None"
         )
-        assert (
-            extract_final_prompt(text)
-            == "A mystical forest at twilight, dramatic lighting, 8k"
-        )
+        assert extract_final_prompt(text) == "A mystical forest at twilight, dramatic lighting, 8k"

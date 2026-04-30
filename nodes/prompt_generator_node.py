@@ -5,7 +5,7 @@ Generate detailed Stable Diffusion prompts using Qwen3-8B via Ollama
 
 import re
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, ClassVar
 
 from .adapters.ollama_client import OllamaClient
 
@@ -18,7 +18,7 @@ except ImportError:
     YAML_AVAILABLE = False
 
 try:
-    from jinja2 import Environment, BaseLoader
+    from jinja2 import BaseLoader, Environment
 
     JINJA2_AVAILABLE = True
 except ImportError:
@@ -53,9 +53,7 @@ def extract_final_prompt(text: str) -> str:
         return text
 
     # Remove Qwen3 thinking blocks: "Thinking...\n...\n...done thinking.\n"
-    text = re.sub(
-        r"Thinking\.\.\.[\s\S]*?\.\.\.done thinking\.[\s]*", "", text, flags=re.DOTALL
-    )
+    text = re.sub(r"Thinking\.\.\.[\s\S]*?\.\.\.done thinking\.[\s]*", "", text, flags=re.DOTALL)
 
     # Remove common prefixes like "**Prompt:**" or "**Stable Diffusion Prompt:**"
     text = re.sub(r"\*\*(?:Stable Diffusion )?Prompt:\*\*\s*", "", text)
@@ -84,7 +82,7 @@ class PromptGeneratorNode:
     CHUNK_TIMEOUT = 30
 
     # Default style templates (fallback when YAML not available)
-    DEFAULT_STYLES = {
+    DEFAULT_STYLES: ClassVar[dict[str, dict[str, str]]] = {
         "cinematic": {
             "name": "Cinematic",
             "description": "Dramatic lighting and composition for film-quality images",
@@ -214,7 +212,11 @@ Format the response as a single, detailed sci-fi prompt.""",
         "video_wan": {
             "name": "Video (WanVideo)",
             "description": "Minimalist template optimized for WanVideo LoRA",
-            "template": "Generate a video prompt for: {{ description }}{% if emphasis %} with focus on {{ emphasis }}{% endif %}{% if mood %}, mood is {{ mood }}{% endif %}",
+            "template": (
+                "Generate a video prompt for: {{ description }}"
+                "{% if emphasis %} with focus on {{ emphasis }}{% endif %}"
+                "{% if mood %}, mood is {{ mood }}{% endif %}"
+            ),
         },
         "still_image": {
             "name": "Still Image (Photography)",
@@ -252,18 +254,16 @@ Format the response as a single, detailed photography prompt.""",
         template_path = Path(__file__).parent.parent / "config" / "templates.yaml"
         if YAML_AVAILABLE and template_path.exists():
             try:
-                with open(template_path, "r") as f:
+                with open(template_path) as f:
                     templates = yaml.safe_load(f)
                     if templates:
                         return list(templates.keys())
             except Exception as e:
-                print(
-                    f"[PromptGenerator] Warning: Failed to load style list from templates.yaml: {e}"
-                )
+                print(f"[PromptGenerator] Warning: Failed to load style list from templates.yaml: {e}")
         return list(cls.DEFAULT_STYLES.keys())
 
     @classmethod
-    def INPUT_TYPES(cls) -> Dict[str, Any]:
+    def INPUT_TYPES(cls) -> dict[str, Any]:
         """Define input parameters for the node."""
         available_models = cls._get_available_models()
         available_styles = cls._get_style_list()
@@ -280,18 +280,12 @@ Format the response as a single, detailed photography prompt.""",
                 ),
                 "style": (
                     available_styles,
-                    {
-                        "default": available_styles[0]
-                        if available_styles
-                        else "cinematic"
-                    },
+                    {"default": available_styles[0] if available_styles else "cinematic"},
                 ),
                 "model": (
                     available_models,
                     {
-                        "default": available_models[0]
-                        if available_models
-                        else "qwen3:8b",
+                        "default": available_models[0] if available_models else "qwen3:8b",
                         "tooltip": "Select Ollama model. LoRA-enhanced models appear first.",
                     },
                 ),
@@ -362,18 +356,16 @@ Format the response as a single, detailed photography prompt.""",
     CATEGORY = "text/generation"
     OUTPUT_NODE = False
 
-    def _load_templates(self) -> Dict[str, Any]:
+    def _load_templates(self) -> dict[str, Any]:
         """Load style templates from YAML file or use defaults."""
         template_path = Path(__file__).parent.parent / "config" / "templates.yaml"
 
         if YAML_AVAILABLE and template_path.exists():
             try:
-                with open(template_path, "r") as f:
+                with open(template_path) as f:
                     templates = yaml.safe_load(f)
                     if templates:
-                        print(
-                            f"[PromptGenerator] Loaded {len(templates)} styles from templates.yaml"
-                        )
+                        print(f"[PromptGenerator] Loaded {len(templates)} styles from templates.yaml")
                         return templates
             except Exception as e:
                 print(f"[PromptGenerator] Warning: Failed to load templates.yaml: {e}")
@@ -385,16 +377,13 @@ Format the response as a single, detailed photography prompt.""",
         self,
         style: str,
         description: str,
-        emphasis: Optional[str] = None,
-        mood: Optional[str] = None,
+        emphasis: str | None = None,
+        mood: str | None = None,
     ) -> str:
         """Render a Jinja2 template with the given variables."""
         template_data = self.style_templates.get(style)
         if template_data is None:
-            print(
-                f"[PromptGenerator] Warning: style '{style}' not found in templates, "
-                f"falling back to 'cinematic'"
-            )
+            print(f"[PromptGenerator] Warning: style '{style}' not found in templates, falling back to 'cinematic'")
             template_data = self.DEFAULT_STYLES.get("cinematic")
 
         # Handle YAML format with 'template' key
@@ -444,8 +433,8 @@ Format the response as a single, detailed photography prompt.""",
         include_reasoning: bool = False,
         model: str = "qwen3:8b",
         timeout: int = 120,
-        unique_id: str = None,
-    ) -> Tuple[str]:
+        unique_id: str | None = None,
+    ) -> tuple[str]:
         """
         Generate a detailed image prompt using Ollama with streaming and progress.
 
@@ -497,9 +486,7 @@ Format the response as a single, detailed photography prompt.""",
             if is_healthy and not is_model_loaded:
                 # Cold start: add 30% buffer
                 effective_timeout = min(int(timeout * 1.3), 600)
-                print(
-                    f"[PromptGenerator] Cold start detected, effective timeout: {effective_timeout}s"
-                )
+                print(f"[PromptGenerator] Cold start detected, effective timeout: {effective_timeout}s")
 
             output = client.generate_streaming(
                 model=model,

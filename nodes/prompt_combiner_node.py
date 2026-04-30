@@ -3,7 +3,20 @@ Prompt Combiner Node for ComfyUI
 Merges multiple prompt strings with configurable blending strategies.
 """
 
-from typing import Any, Dict, List, Tuple
+from enum import StrEnum
+from typing import Any, Literal, get_args
+
+
+class CombineMode(StrEnum):
+    """Supported strategies for combining multiple prompts."""
+
+    BLEND = "blend"
+    CONCAT = "concat"
+    WEIGHTED_AVERAGE = "weighted_average"
+
+
+# Single source of truth for the choices exposed in INPUT_TYPES and accepted by combine().
+ModeLiteral = Literal["blend", "concat", "weighted_average"]
 
 
 class PromptCombinerNode:
@@ -17,7 +30,7 @@ class PromptCombinerNode:
     """
 
     @classmethod
-    def INPUT_TYPES(cls) -> Dict[str, Any]:
+    def INPUT_TYPES(cls) -> dict[str, Any]:
         return {
             "required": {
                 "prompt_1": (
@@ -29,8 +42,8 @@ class PromptCombinerNode:
                     },
                 ),
                 "mode": (
-                    ["blend", "concat", "weighted_average"],
-                    {"default": "blend"},
+                    list(get_args(ModeLiteral)),
+                    {"default": CombineMode.BLEND.value},
                 ),
             },
             "optional": {
@@ -117,7 +130,7 @@ class PromptCombinerNode:
     def combine(
         self,
         prompt_1: str,
-        mode: str,
+        mode: ModeLiteral,
         prompt_2: str = "",
         prompt_3: str = "",
         prompt_4: str = "",
@@ -126,7 +139,7 @@ class PromptCombinerNode:
         weight_3: float = 1.0,
         weight_4: float = 1.0,
         separator: str = ", ",
-    ) -> Tuple[str]:
+    ) -> tuple[str]:
         """
         Combine multiple prompts using the selected mode.
 
@@ -140,16 +153,16 @@ class PromptCombinerNode:
         Returns:
             Tuple containing the combined prompt string
         """
-        # Collect non-empty prompts with their weights
-        prompts: List[Tuple[str, float]] = []
-        for p, w in [
-            (prompt_1, weight_1),
-            (prompt_2, weight_2),
-            (prompt_3, weight_3),
-            (prompt_4, weight_4),
-        ]:
-            if p and p.strip():
-                prompts.append((p.strip(), w))
+        prompts: list[tuple[str, float]] = [
+            (p.strip(), w)
+            for p, w in (
+                (prompt_1, weight_1),
+                (prompt_2, weight_2),
+                (prompt_3, weight_3),
+                (prompt_4, weight_4),
+            )
+            if p and p.strip()
+        ]
 
         if not prompts:
             return ("[PromptCombiner] At least one prompt is required.",)
@@ -157,16 +170,21 @@ class PromptCombinerNode:
         if len(prompts) == 1:
             return (prompts[0][0],)
 
-        if mode == "blend":
-            return (self._blend(prompts),)
-        elif mode == "concat":
-            return (self._concat(prompts, separator),)
-        elif mode == "weighted_average":
-            return (self._weighted_average(prompts),)
-        else:
-            return (f"[PromptCombiner] Unknown mode: {mode}",)
+        try:
+            selected = CombineMode(mode)
+        except ValueError:
+            valid = ", ".join(m.value for m in CombineMode)
+            return (f"[PromptCombiner] Unknown mode {mode!r}. Valid: {valid}",)
 
-    def _blend(self, prompts: List[Tuple[str, float]]) -> str:
+        match selected:
+            case CombineMode.BLEND:
+                return (self._blend(prompts),)
+            case CombineMode.CONCAT:
+                return (self._concat(prompts, separator),)
+            case CombineMode.WEIGHTED_AVERAGE:
+                return (self._weighted_average(prompts),)
+
+    def _blend(self, prompts: list[tuple[str, float]]) -> str:
         """
         Blend prompts using ComfyUI-style emphasis markers.
         Higher weight = more parentheses emphasis.
@@ -186,12 +204,12 @@ class PromptCombinerNode:
                 parts.append(text)
         return ", ".join(parts)
 
-    def _concat(self, prompts: List[Tuple[str, float]], separator: str) -> str:
+    def _concat(self, prompts: list[tuple[str, float]], separator: str) -> str:
         """Simple concatenation with separator."""
         texts = [p[0] for p in prompts]
         return separator.join(texts)
 
-    def _weighted_average(self, prompts: List[Tuple[str, float]]) -> str:
+    def _weighted_average(self, prompts: list[tuple[str, float]]) -> str:
         """
         Weighted text combination using emphasis markers.
         Higher-weighted prompts receive stronger ComfyUI emphasis parentheses.
