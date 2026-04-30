@@ -36,12 +36,16 @@ jobs:
         run: |
           pip install comfy-cli
 
+      - name: Disable telemetry (suppresses interactive opt-in prompt in CI)
+        run: |
+          comfy --skip-prompt tracking disable
+
       - name: Validate node metadata
         run: |
-          comfy node validate
+          comfy --skip-prompt node validate
 
       - name: Publish to Registry
         env:
           REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
         run: |
-          comfy node publish --confirm
+          comfy --skip-prompt node publish --confirm
