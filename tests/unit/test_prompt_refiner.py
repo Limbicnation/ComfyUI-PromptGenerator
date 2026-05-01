@@ -17,9 +17,12 @@ class TestPromptRefinerSeed:
             captured_seeds.append(seed)
             return f"refined with seed={seed}"
 
-        with patch.object(node, "REFINEMENT_PROMPT", "{prompt}"), patch(
-            "nodes.prompt_refiner_node.OllamaClient.generate_streaming",
-            side_effect=_capture_seed,
+        with (
+            patch.object(node, "REFINEMENT_PROMPT", "{prompt}"),
+            patch(
+                "nodes.prompt_refiner_node.OllamaClient.generate_streaming",
+                side_effect=_capture_seed,
+            ),
         ):
             result = node.refine(
                 prompt="a forest",
@@ -43,9 +46,12 @@ class TestPromptRefinerSeed:
             captured_seeds.append(seed)
             return "refined"
 
-        with patch.object(node, "REFINEMENT_PROMPT", "{prompt}"), patch(
-            "nodes.prompt_refiner_node.OllamaClient.generate_streaming",
-            side_effect=_capture_seed,
+        with (
+            patch.object(node, "REFINEMENT_PROMPT", "{prompt}"),
+            patch(
+                "nodes.prompt_refiner_node.OllamaClient.generate_streaming",
+                side_effect=_capture_seed,
+            ),
         ):
             node.refine(
                 prompt="a forest",
