@@ -25,7 +25,10 @@ class StyleApplierNode:
     @classmethod
     def INPUT_TYPES(cls):
         """Define input parameters for the node."""
-        from style_presets import StylePreset
+        try:
+            from ..style_presets import StylePreset
+        except ImportError:
+            from style_presets import StylePreset
 
         return {
             "required": {
@@ -66,7 +69,10 @@ class StyleApplierNode:
         include_technical: bool = True,
     ) -> tuple[str, str]:
         """Apply style keywords to a prompt."""
-        from style_presets import StylePreset
+        try:
+            from ..style_presets import StylePreset
+        except ImportError:
+            from style_presets import StylePreset
 
         # Normalize inputs
         prompt = prompt.strip() if prompt else ""
