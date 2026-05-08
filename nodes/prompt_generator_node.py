@@ -492,7 +492,7 @@ Format the response as a single, detailed photography prompt.""",
                 effective_timeout = min(int(timeout * 1.3), 600)
                 print(f"[PromptGenerator] Cold start detected, effective timeout: {effective_timeout}s")
 
-            output = client.generate_streaming(
+            result = client.generate_streaming(
                 model=model,
                 prompt=prompt,
                 temperature=temperature,
@@ -501,8 +501,8 @@ Format the response as a single, detailed photography prompt.""",
                 pbar=pbar,
             )
 
-            if output is not None:
-                output = output.strip()
+            if result.kind == "ok" and result.text is not None:
+                output = result.text.strip()
                 if not include_reasoning:
                     output = extract_final_prompt(output)
 
@@ -515,7 +515,13 @@ Format the response as a single, detailed photography prompt.""",
                 else:
                     return ("[PromptGenerator] Generation returned empty result.",)
 
-            print("[PromptGenerator] Streaming failed, falling back to subprocess")
+            # Subprocess fallback would also fail for these classes; surface the
+            # message immediately so the user gets actionable guidance.
+            if result.kind in ("model_crash", "server_error", "unavailable"):
+                print(f"[PromptGenerator] {result.kind}: {result.message}")
+                return (f"[PromptGenerator] {result.message}",)
+
+            print(f"[PromptGenerator] Streaming failed ({result.kind}), falling back to subprocess")
 
         # Fallback to subprocess (no temperature/top_p control)
         success, output = client.generate_subprocess(model, prompt, timeout)

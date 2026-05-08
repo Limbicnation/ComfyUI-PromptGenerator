@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+from nodes.adapters.ollama_client import StreamResult
 from nodes.prompt_refiner_node import PromptRefinerNode
 
 
@@ -15,7 +16,7 @@ class TestPromptRefinerSeed:
 
         def _capture_seed(*, model, prompt, temperature, top_p, timeout, pbar, seed):
             captured_seeds.append(seed)
-            return f"refined with seed={seed}"
+            return StreamResult(text=f"refined with seed={seed}", kind="ok")
 
         with (
             patch.object(node, "REFINEMENT_PROMPT", "{prompt}"),
@@ -44,7 +45,7 @@ class TestPromptRefinerSeed:
 
         def _capture_seed(*, model, prompt, temperature, top_p, timeout, pbar, seed):
             captured_seeds.append(seed)
-            return "refined"
+            return StreamResult(text="refined", kind="ok")
 
         with (
             patch.object(node, "REFINEMENT_PROMPT", "{prompt}"),

@@ -163,7 +163,7 @@ Refined prompt:"""
             pass_seed = None if effective_seed is None else effective_seed + i
 
             # Generate refined version
-            output = client.generate_streaming(
+            result = client.generate_streaming(
                 model=model,
                 prompt=refinement,
                 temperature=temperature,
@@ -173,8 +173,13 @@ Refined prompt:"""
                 seed=pass_seed,
             )
 
-            if output is None:
-                # Fallback to subprocess
+            if result.kind == "ok" and result.text is not None:
+                output = result.text
+            elif result.kind in ("model_crash", "server_error", "unavailable"):
+                # Subprocess fallback would also fail; surface directly.
+                return (f"[PromptRefiner] Pass {i + 1}: {result.message}",)
+            else:
+                # timeout / transient — try subprocess
                 success, output = client.generate_subprocess(model, refinement, timeout)
                 if not success:
                     return (f"[PromptRefiner] Pass {i + 1} failed: {output}",)
