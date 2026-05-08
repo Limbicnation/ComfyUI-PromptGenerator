@@ -13,6 +13,7 @@ import logging
 import subprocess
 import threading
 import time
+from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,30 @@ try:
     OLLAMA_API_AVAILABLE = True
 except ImportError:
     OLLAMA_API_AVAILABLE = False
+
+try:
+    from ollama import ResponseError as OllamaResponseError
+except ImportError:
+    OllamaResponseError = None  # older ollama package or package missing
+
+
+@dataclass
+class StreamResult:
+    """Outcome of a streaming generation call.
+
+    kind values:
+        ok           - generation succeeded; text holds the response
+        timeout      - per-chunk or total timeout exceeded
+        transient    - network / connection issue; subprocess fallback may help
+        model_crash  - llama runner subprocess died (HTTP 500); subprocess won't help
+        server_error - other non-2xx response from Ollama server
+        unavailable  - ollama python package not installed
+    """
+
+    text: str | None = None
+    kind: str = "ok"
+    message: str = field(default="")
+
 
 try:
     import comfy.utils
@@ -154,7 +179,7 @@ class OllamaClient:
         timeout: int,
         pbar: Any | None = None,
         seed: int | None = None,
-    ) -> str | None:
+    ) -> StreamResult:
         """
         Stream ollama.generate() with per-chunk and total timeout enforcement.
 
@@ -162,10 +187,15 @@ class OllamaClient:
             seed: Optional seed for deterministic generation (e.g. PromptRefiner)
 
         Returns:
-            Full response text, or None on failure.
+            StreamResult with `kind` indicating success or failure category. On
+            success, `text` holds the concatenated response. On failure, `message`
+            contains a user-facing description suitable for surfacing in the UI.
         """
         if not OLLAMA_API_AVAILABLE:
-            return None
+            return StreamResult(
+                kind="unavailable",
+                message="Ollama python package not installed.",
+            )
 
         chunks: list[str] = []
         start = time.monotonic()
@@ -203,7 +233,10 @@ class OllamaClient:
                 elapsed = time.monotonic() - start
                 if elapsed >= timeout:
                     self._log(f"Total timeout ({timeout}s) reached")
-                    break
+                    return StreamResult(
+                        kind="timeout",
+                        message=f"Total timeout ({timeout}s) reached during generation.",
+                    )
 
                 result_holder.clear()
                 t = threading.Thread(target=_iter_next, args=(it,), daemon=True)
@@ -216,7 +249,10 @@ class OllamaClient:
                 if t.is_alive():
                     label = "first chunk" if not got_first_chunk else "chunk"
                     self._log(f"Timeout waiting for {label} ({wait_time:.0f}s)")
-                    return None
+                    return StreamResult(
+                        kind="timeout",
+                        message=f"Timeout waiting for {label} ({wait_time:.0f}s).",
+                    )
 
                 if "error" in result_holder:
                     raise result_holder["error"]
@@ -240,24 +276,66 @@ class OllamaClient:
 
         except ConnectionError as e:
             self._log(f"Connection error: {e}")
-            return None
+            return StreamResult(kind="transient", message=f"Ollama not reachable: {e}")
         except TimeoutError as e:
             self._log(f"Timeout error: {e}")
-            return None
+            return StreamResult(kind="timeout", message=f"Ollama timeout: {e}")
         except (TypeError, AttributeError) as e:
             # API contract mismatch — propagate so caller knows the integration broke
             raise RuntimeError(f"Ollama API contract mismatch: {e}") from e
         except Exception as e:
-            # Unknown failure — log and propagate with context
-            raise RuntimeError(f"Streaming generation failed: {e}") from e
+            return self._classify_streaming_exception(e, model)
 
         if not chunks:
-            return None
+            return StreamResult(
+                kind="transient",
+                message="Generation returned no content.",
+            )
 
         elapsed = time.monotonic() - start
         full_text = "".join(chunks)
         self._log(f"Streaming complete: {len(full_text)} chars in {elapsed:.1f}s")
-        return full_text
+        return StreamResult(text=full_text, kind="ok")
+
+    def _classify_streaming_exception(self, exc: Exception, model: str) -> StreamResult:
+        """Map an exception raised during streaming to a StreamResult.
+
+        Detects llama-runner crashes (HTTP 500 with 'runner terminated' /
+        'exit status' / 'load failed' in the body) and surfaces an actionable
+        message instead of a raw stacktrace.
+        """
+        msg = str(exc).lower()
+        is_response_error = OllamaResponseError is not None and isinstance(exc, OllamaResponseError)
+        # Even without OllamaResponseError class, recognise duck-typed responses
+        status = getattr(exc, "status_code", None)
+
+        crash_signals = (
+            "runner terminated",
+            "runner process has terminated",
+            "exit status",
+            "load failed",
+        )
+        if (is_response_error or status is not None) and status == 500 and any(s in msg for s in crash_signals):
+            friendly = (
+                f"Ollama llama runner crashed loading '{model}'. "
+                "This usually means the model file is corrupt, incompatible, "
+                "or out of VRAM. Try: (1) restart Ollama "
+                "(`sudo systemctl restart ollama`), "
+                "(2) switch to a known-good model like 'qwen3:8b', "
+                "(3) re-pull or rebuild the model."
+            )
+            self._log(f"Model crash detected: {exc}")
+            return StreamResult(kind="model_crash", message=friendly)
+
+        if is_response_error or status is not None:
+            self._log(f"Server error {status}: {exc}")
+            return StreamResult(
+                kind="server_error",
+                message=f"Ollama returned status {status}: {exc}",
+            )
+
+        self._log(f"Streaming failed: {exc}")
+        return StreamResult(kind="transient", message=f"Streaming failed: {exc}")
 
     def generate_subprocess(
         self,

@@ -4,7 +4,7 @@ Unit tests for OllamaClient adapter.
 
 from unittest.mock import MagicMock, patch
 
-from nodes.adapters.ollama_client import OllamaClient
+from nodes.adapters.ollama_client import OllamaClient, StreamResult
 
 
 class TestOllamaClientDiscovery:
@@ -219,3 +219,190 @@ class TestOllamaClientSubprocess:
             success, output = client.generate_subprocess("qwen3:8b", "prompt", 30)
             assert success is False
             assert "not found" in output.lower() or "Install" in output
+
+
+class _FakeResponseError(Exception):
+    """Duck-typed stand-in for ollama.ResponseError with status_code attr."""
+
+    def __init__(self, message: str, status_code: int):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class TestOllamaClientStreamingErrors:
+    """Test suite for generate_streaming error categorisation."""
+
+    @staticmethod
+    def _patch_module(mock_ollama, response_error_cls=None):
+        """Helper: swap module-level ollama + ResponseError, return restore fn."""
+        import nodes.adapters.ollama_client as client_module
+
+        orig = (
+            getattr(client_module, "ollama", None),
+            getattr(client_module, "OLLAMA_API_AVAILABLE", False),
+            getattr(client_module, "OllamaResponseError", None),
+        )
+        client_module.ollama = mock_ollama
+        client_module.OLLAMA_API_AVAILABLE = True
+        client_module.OllamaResponseError = response_error_cls
+
+        def restore():
+            client_module.ollama = orig[0]
+            client_module.OLLAMA_API_AVAILABLE = orig[1]
+            client_module.OllamaResponseError = orig[2]
+
+        return restore
+
+    def test_runner_crash_returns_model_crash_kind(self):
+        """500 + 'runner terminated' should be classified as model_crash."""
+        crash_exc = _FakeResponseError(
+            "llama runner process has terminated: %!w(<nil>) (status code: 500)",
+            status_code=500,
+        )
+
+        def _bad_iter():
+            yield from ()
+            raise crash_exc
+
+        mock_ollama = MagicMock()
+        mock_ollama.generate.return_value = _bad_iter()
+
+        restore = self._patch_module(mock_ollama, response_error_cls=_FakeResponseError)
+        try:
+            client = OllamaClient()
+            result = client.generate_streaming(
+                model="qwen3-limbicnation",
+                prompt="hello",
+                temperature=0.7,
+                top_p=0.9,
+                timeout=30,
+            )
+        finally:
+            restore()
+
+        assert isinstance(result, StreamResult)
+        assert result.kind == "model_crash"
+        assert "qwen3-limbicnation" in result.message
+        assert "restart Ollama" in result.message
+        assert "qwen3:8b" in result.message
+        assert result.text is None
+
+    def test_runner_crash_via_duck_typed_error_when_class_unavailable(self):
+        """Even without ollama.ResponseError, status_code=500 + signal triggers model_crash."""
+        crash_exc = _FakeResponseError("Load failed: llama runner terminated", status_code=500)
+
+        def _bad_iter():
+            yield from ()
+            raise crash_exc
+
+        mock_ollama = MagicMock()
+        mock_ollama.generate.return_value = _bad_iter()
+
+        # Simulate older ollama package (no ResponseError export)
+        restore = self._patch_module(mock_ollama, response_error_cls=None)
+        try:
+            client = OllamaClient()
+            result = client.generate_streaming(
+                model="bad-model",
+                prompt="x",
+                temperature=0.7,
+                top_p=0.9,
+                timeout=30,
+            )
+        finally:
+            restore()
+
+        assert result.kind == "model_crash"
+
+    def test_generic_server_error_returns_server_error(self):
+        """Non-crash 5xx (e.g. 503) should be classified as server_error."""
+        exc = _FakeResponseError("service unavailable", status_code=503)
+
+        def _bad_iter():
+            yield from ()
+            raise exc
+
+        mock_ollama = MagicMock()
+        mock_ollama.generate.return_value = _bad_iter()
+
+        restore = self._patch_module(mock_ollama, response_error_cls=_FakeResponseError)
+        try:
+            client = OllamaClient()
+            result = client.generate_streaming(
+                model="qwen3:8b",
+                prompt="x",
+                temperature=0.7,
+                top_p=0.9,
+                timeout=30,
+            )
+        finally:
+            restore()
+
+        assert result.kind == "server_error"
+        assert "503" in result.message
+
+    def test_connection_error_returns_transient(self):
+        """ConnectionError raised during streaming should be transient."""
+
+        def _bad_iter():
+            yield from ()
+            raise ConnectionError("connection refused")
+
+        mock_ollama = MagicMock()
+        mock_ollama.generate.return_value = _bad_iter()
+
+        restore = self._patch_module(mock_ollama, response_error_cls=_FakeResponseError)
+        try:
+            client = OllamaClient()
+            result = client.generate_streaming(
+                model="qwen3:8b",
+                prompt="x",
+                temperature=0.7,
+                top_p=0.9,
+                timeout=30,
+            )
+        finally:
+            restore()
+
+        assert result.kind == "transient"
+        assert "not reachable" in result.message
+
+    def test_success_returns_ok(self):
+        """Normal streaming should yield kind='ok' with concatenated text."""
+
+        def _good_iter():
+            yield {"response": "hello "}
+            yield {"response": "world"}
+
+        mock_ollama = MagicMock()
+        mock_ollama.generate.return_value = _good_iter()
+
+        restore = self._patch_module(mock_ollama, response_error_cls=_FakeResponseError)
+        try:
+            client = OllamaClient()
+            result = client.generate_streaming(
+                model="qwen3:8b",
+                prompt="x",
+                temperature=0.7,
+                top_p=0.9,
+                timeout=30,
+            )
+        finally:
+            restore()
+
+        assert result.kind == "ok"
+        assert result.text == "hello world"
+
+    def test_unavailable_when_api_missing(self):
+        """If ollama package is unavailable, kind should be 'unavailable'."""
+        with patch("nodes.adapters.ollama_client.OLLAMA_API_AVAILABLE", False):
+            client = OllamaClient()
+            result = client.generate_streaming(
+                model="qwen3:8b",
+                prompt="x",
+                temperature=0.7,
+                top_p=0.9,
+                timeout=30,
+            )
+        assert result.kind == "unavailable"
+        assert result.text is None

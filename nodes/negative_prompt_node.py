@@ -144,7 +144,7 @@ Negative prompt:"""
         logger.info("Generating negative for style='%s'", style)
 
         # Generate via streaming
-        output = client.generate_streaming(
+        result = client.generate_streaming(
             model=model,
             prompt=negative_prompt_text,
             temperature=temperature,
@@ -152,8 +152,13 @@ Negative prompt:"""
             timeout=timeout,
         )
 
-        if output is None:
-            # Fallback to subprocess
+        if result.kind == "ok" and result.text is not None:
+            output = result.text
+        elif result.kind in ("model_crash", "server_error", "unavailable"):
+            # Subprocess fallback would also fail; surface message directly.
+            return (f"[NegativePrompt] {result.message}",)
+        else:
+            # timeout / transient — try subprocess
             success, output = client.generate_subprocess(model, negative_prompt_text, timeout)
             if not success:
                 return (f"[NegativePrompt] Generation failed: {output}",)
