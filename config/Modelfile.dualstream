@@ -1,0 +1,39 @@
+# Dual-Stream Prompt Refiner Modelfile
+#
+# Registers the pre-merged Q8 GGUF from
+# Limbicnation/qwen2-5-7b-dual-stream-prompt-lora with Ollama so the
+# "Prompt Dual-Stream Refiner" ComfyUI node can use it.
+#
+# Usage:
+#   1. Download qwen2-5-7b-dual-stream-q8.gguf from the HF repo into this dir:
+#        huggingface-cli download Limbicnation/qwen2-5-7b-dual-stream-prompt-lora \
+#          qwen2-5-7b-dual-stream-q8.gguf --local-dir .
+#   2. Create the Ollama model (name contains "prompt" so it sorts to the top
+#      of the node's model dropdown — see OllamaClient.LORA_KEYWORDS):
+#        ollama create limbicnation-dualstream-prompt -f config/Modelfile.dualstream
+#   3. Verify the output format before relying on the node's parser:
+#        ollama run limbicnation-dualstream-prompt "a mystical forest at twilight"
+#      Confirm it emits "Positive: ...\nNegative: ...". If the trained format
+#      differs, adjust INSTRUCTION_PROMPT / parse_dual_stream in
+#      nodes/prompt_dual_stream_refiner_node.py to match.
+#   4. Restart ComfyUI — the model appears in the node's dropdown.
+
+# Pre-merged Q8 GGUF (already contains the LoRA — no ADAPTER needed).
+FROM ./qwen2-5-7b-dual-stream-q8.gguf
+
+# Base is Qwen2.5-7B-Instruct, which uses the standard ChatML template.
+# (Ollama applies a sensible Qwen2.5 default; uncomment to pin explicitly.)
+# TEMPLATE """{{ if .System }}<|im_start|>system
+# {{ .System }}<|im_end|>
+# {{ end }}<|im_start|>user
+# {{ .Prompt }}<|im_end|>
+# <|im_start|>assistant
+# """
+
+SYSTEM """You are an expert Stable Diffusion prompt engineer. Given a description, you produce a detailed positive prompt and a matching negative prompt, formatted as:
+Positive: <positive prompt>
+Negative: <negative prompt>"""
+
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+PARAMETER num_ctx 4096
