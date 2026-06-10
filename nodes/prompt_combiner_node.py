@@ -3,8 +3,16 @@ Prompt Combiner Node for ComfyUI
 Merges multiple prompt strings with configurable blending strategies.
 """
 
-from enum import StrEnum
+import sys
 from typing import Any, Literal, get_args
+
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:  # Python 3.10 — StrEnum was added in 3.11; back-port with matching str() semantics.
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        __str__ = str.__str__
 
 
 class CombineMode(StrEnum):
