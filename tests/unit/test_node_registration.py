@@ -31,6 +31,7 @@ EXPECTED_NODES: frozenset[str] = frozenset(
         "Limbicnation_PromptGenerator",
         "Limbicnation_StyleApplier",
         "Limbicnation_PromptRefiner",
+        "Limbicnation_PromptDualStreamRefiner",
         "Limbicnation_NegativePrompt",
         "Limbicnation_PromptCombiner",
     }
