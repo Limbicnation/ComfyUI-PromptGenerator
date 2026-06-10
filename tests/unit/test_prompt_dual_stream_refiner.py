@@ -48,6 +48,17 @@ class TestParseDualStream:
         assert "line one" in pos and "line two" in pos
         assert neg == "bad, worse"
 
+    def test_negative_space_in_body_is_not_a_split(self):
+        """The art term 'negative space' must not be mistaken for a label."""
+        pos, neg = parse_dual_stream("a portrait with strong negative space, studio lighting")
+        assert pos == "a portrait with strong negative space, studio lighting"
+        assert neg == ""
+
+    def test_hyphenated_negative_space_in_body_is_not_a_split(self):
+        pos, neg = parse_dual_stream("Positive: negative-space composition\nNegative: blurry")
+        assert pos == "negative-space composition"
+        assert neg == "blurry"
+
 
 class TestRefineFlow:
     """refine() should parse a successful stream into two outputs."""

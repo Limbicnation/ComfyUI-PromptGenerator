@@ -21,12 +21,15 @@ from .prompt_generator_node import extract_final_prompt
 logger = logging.getLogger(__name__)
 
 
-# Strip a leading "Positive[ prompt]:" / "Negative[ prompt]:" label, tolerating
-# markdown bold (**) both before the label and after the separator, plus a ":"
-# or "-" separator. e.g. "**Positive:** text".
-_POS_LABEL = re.compile(r"^\s*\**\s*positive(?:\s+prompt)?\s*\**\s*[:\-]\s*\**\s*", re.IGNORECASE)
-# Locate the start of the negative section anywhere in the text.
-_NEG_LABEL = re.compile(r"\**\s*negative(?:\s+prompt)?\s*\**\s*[:\-]\s*\**\s*", re.IGNORECASE)
+# Strip a leading "Positive[ prompt]:" label, tolerating markdown bold (**) both
+# before the label and after the colon. e.g. "**Positive:** text".
+# A colon is required (not a hyphen) so art terms like "negative-space" in the
+# prompt body are not mistaken for a label.
+_POS_LABEL = re.compile(r"^\s*\**\s*positive(?:\s+prompt)?\s*\**\s*:\s*\**\s*", re.IGNORECASE)
+# Locate the negative section. Anchored to a line start (the imposed output
+# format puts "Negative:" on its own line) so the word "negative" appearing
+# mid-sentence in the positive prompt (e.g. "negative space") never triggers a split.
+_NEG_LABEL = re.compile(r"(?:^|\n)\s*\**\s*negative(?:\s+prompt)?\s*\**\s*:\s*\**\s*", re.IGNORECASE)
 
 
 def parse_dual_stream(text: str) -> tuple[str, str]:
