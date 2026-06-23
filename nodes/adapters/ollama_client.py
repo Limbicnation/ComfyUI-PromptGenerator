@@ -483,6 +483,7 @@ class OllamaClient:
         allocation).  In normal operation the daemon thread will finish
         quickly and does not need to be joined.
         """
+
         def _run() -> None:
             client = OllamaClient(logger_prefix=logger_prefix)
             client.cleanup(model, unload=unload, release_cuda=release_cuda)
