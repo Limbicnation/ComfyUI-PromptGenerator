@@ -7,8 +7,10 @@ Handles:
 - Streaming generation with per-chunk and total timeout enforcement
 - Model discovery with caching and LoRA prioritization
 - Subprocess fallback when Python API unavailable
+- VRAM-aware model lifecycle (autounload via keep_alive, CUDA cache release)
 """
 
+import gc
 import logging
 import subprocess
 import threading
@@ -179,12 +181,16 @@ class OllamaClient:
         timeout: int,
         pbar: Any | None = None,
         seed: int | None = None,
+        keep_alive: str | int | None = None,
     ) -> StreamResult:
         """
         Stream ollama.generate() with per-chunk and total timeout enforcement.
 
         Args:
             seed: Optional seed for deterministic generation (e.g. PromptRefiner)
+            keep_alive: Ollama model retention after request. ``"0s"`` or ``0``
+                unloads immediately (recommended for shared-VRAM setups).
+                ``None`` defers to the Ollama server default (5 min).
 
         Returns:
             StreamResult with `kind` indicating success or failure category. On
@@ -208,12 +214,16 @@ class OllamaClient:
             if seed is not None:
                 options["seed"] = seed
 
-            stream = ollama.generate(
+            gen_kwargs: dict[str, Any] = dict(
                 model=model,
                 prompt=prompt,
                 stream=True,
                 options=options,
             )
+            if keep_alive is not None:
+                gen_kwargs["keep_alive"] = keep_alive
+
+            stream = ollama.generate(**gen_kwargs)
 
             result_holder: dict[str, Any] = {}
 
@@ -384,3 +394,100 @@ class OllamaClient:
             except Exception:
                 pass
         return None
+
+    def unload_model(self, model: str, timeout: int = 30) -> bool:
+        """Explicitly unload a model from Ollama VRAM.
+
+        Sends a generate request with ``keep_alive=0`` so the Ollama server
+        evicts the model immediately.  Returns ``True`` on success.
+        """
+        if not OLLAMA_API_AVAILABLE:
+            return False
+
+        try:
+            ollama.generate(
+                model=model,
+                prompt="",
+                keep_alive=0,
+                options={"num_predict": 1},
+            )
+            self._log(f"Unloaded model '{model}' from VRAM")
+            return True
+        except ConnectionError as e:
+            self._log(f"Could not connect to unload model: {e}")
+            return False
+        except Exception as e:
+            self._log(f"Failed to unload model '{model}': {e}")
+            return False
+
+    @staticmethod
+    def release_vram() -> None:
+        """Release PyTorch CUDA memory reserves.
+
+        Calls ``torch.cuda.empty_cache()`` and Python ``gc.collect()`` to
+        return freed VRAM to the allocator.  Safe to call even when no CUDA
+        device is available.
+        """
+        gc.collect()
+        try:
+            import torch
+
+            if torch.cuda.is_available():
+                # empty_cache() only frees the current device; clear every GPU so
+                # multi-GPU rigs don't leave cached blocks on non-default devices.
+                for device in range(torch.cuda.device_count()):
+                    with torch.cuda.device(device):
+                        torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+        except ImportError:
+            pass
+
+    def cleanup(
+        self,
+        model: str,
+        unload: bool = True,
+        release_cuda: bool = True,
+    ) -> None:
+        """Unload the Ollama model and release CUDA VRAM.
+
+        This is the recommended post-execution cleanup for all nodes that
+        invoke Ollama.  It ensures:
+
+        1. The Ollama model is evicted from GPU VRAM (``keep_alive=0``).
+        2. PyTorch's CUDA allocator returns any freed blocks.
+
+        Both operations are non-blocking relative to the ComfyUI queue — the
+        next node can start loading while cleanup finishes.
+
+        Args:
+            model: Ollama model name to unload.
+            unload: Whether to send the Ollama unload request.
+            release_cuda: Whether to call ``torch.cuda.empty_cache()``.
+        """
+        if unload:
+            self.unload_model(model)
+        if release_cuda:
+            self.release_vram()
+
+    @staticmethod
+    def cleanup_async(
+        model: str,
+        logger_prefix: str = "OllamaClient",
+        unload: bool = True,
+        release_cuda: bool = True,
+    ) -> threading.Thread:
+        """Run cleanup in a background daemon thread.
+
+        Returns the ``Thread`` object so callers can optionally ``.join()``
+        if they need synchronous guarantees (e.g. before a critical VRAM
+        allocation).  In normal operation the daemon thread will finish
+        quickly and does not need to be joined.
+        """
+
+        def _run() -> None:
+            client = OllamaClient(logger_prefix=logger_prefix)
+            client.cleanup(model, unload=unload, release_cuda=release_cuda)
+
+        t = threading.Thread(target=_run, daemon=True, name=f"ollama-cleanup-{model}")
+        t.start()
+        return t

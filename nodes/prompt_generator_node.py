@@ -477,65 +477,80 @@ Format the response as a single, detailed photography prompt.""",
         client = OllamaClient(logger_prefix="PromptGenerator")
         pbar = client.create_progress_bar(unique_id)
 
-        # Use Ollama streaming API if available
-        if OLLAMA_API_AVAILABLE:
-            # Health check and cold-start detection
-            effective_timeout = timeout
-            is_healthy, health_msg, is_model_loaded = client.check_health(model)
-            print(f"[PromptGenerator] Health: {health_msg}")
-
-            if pbar is not None:
-                pbar.update_absolute(5)
-
-            if is_healthy and not is_model_loaded:
-                # Cold start: add 30% buffer
-                effective_timeout = min(int(timeout * 1.3), 600)
-                print(f"[PromptGenerator] Cold start detected, effective timeout: {effective_timeout}s")
-
-            result = client.generate_streaming(
-                model=model,
-                prompt=prompt,
-                temperature=temperature,
-                top_p=top_p,
-                timeout=effective_timeout,
-                pbar=pbar,
-            )
-
-            if result.kind == "ok" and result.text is not None:
-                output = result.text.strip()
-                if not include_reasoning:
-                    output = extract_final_prompt(output)
+        used_subprocess = False
+        try:
+            # Use Ollama streaming API if available
+            if OLLAMA_API_AVAILABLE:
+                # Health check and cold-start detection
+                effective_timeout = timeout
+                is_healthy, health_msg, is_model_loaded = client.check_health(model)
+                print(f"[PromptGenerator] Health: {health_msg}")
 
                 if pbar is not None:
-                    pbar.update_absolute(100)
+                    pbar.update_absolute(5)
 
-                if output:
-                    print(f"[PromptGenerator] Generated {len(output)} characters")
-                    return (output,)
-                else:
-                    return ("[PromptGenerator] Generation returned empty result.",)
+                if is_healthy and not is_model_loaded:
+                    # Cold start: add 30% buffer
+                    effective_timeout = min(int(timeout * 1.3), 600)
+                    print(f"[PromptGenerator] Cold start detected, effective timeout: {effective_timeout}s")
 
-            # Subprocess fallback would also fail for these classes; surface the
-            # message immediately so the user gets actionable guidance.
-            if result.kind in ("model_crash", "server_error", "unavailable"):
-                print(f"[PromptGenerator] {result.kind}: {result.message}")
-                return (f"[PromptGenerator] {result.message}",)
+                result = client.generate_streaming(
+                    model=model,
+                    prompt=prompt,
+                    temperature=temperature,
+                    top_p=top_p,
+                    timeout=effective_timeout,
+                    pbar=pbar,
+                    keep_alive="0s",
+                )
 
-            print(f"[PromptGenerator] Streaming failed ({result.kind}), falling back to subprocess")
+                if result.kind == "ok" and result.text is not None:
+                    output = result.text.strip()
+                    if not include_reasoning:
+                        output = extract_final_prompt(output)
 
-        # Fallback to subprocess (no temperature/top_p control)
-        success, output = client.generate_subprocess(model, prompt, timeout)
-        if not success:
-            return (f"[PromptGenerator] {output}",)
+                    if pbar is not None:
+                        pbar.update_absolute(100)
 
-        if not include_reasoning:
-            output = extract_final_prompt(output)
+                    if output:
+                        print(f"[PromptGenerator] Generated {len(output)} characters")
+                        return (output,)
+                    else:
+                        return ("[PromptGenerator] Generation returned empty result.",)
 
-        if pbar is not None:
-            pbar.update_absolute(100)
+                # Subprocess fallback would also fail for these classes; surface the
+                # message immediately so the user gets actionable guidance.
+                if result.kind in ("model_crash", "server_error", "unavailable"):
+                    print(f"[PromptGenerator] {result.kind}: {result.message}")
+                    return (f"[PromptGenerator] {result.message}",)
 
-        if output:
-            print(f"[PromptGenerator] Generated {len(output)} characters (subprocess)")
-            return (output,)
-        else:
-            return ("[PromptGenerator] Generation returned empty result.",)
+                print(f"[PromptGenerator] Streaming failed ({result.kind}), falling back to subprocess")
+
+            # Fallback to subprocess (no temperature/top_p control)
+            used_subprocess = True
+            success, output = client.generate_subprocess(model, prompt, timeout)
+            if not success:
+                return (f"[PromptGenerator] {output}",)
+
+            if not include_reasoning:
+                output = extract_final_prompt(output)
+
+            if pbar is not None:
+                pbar.update_absolute(100)
+
+            if output:
+                print(f"[PromptGenerator] Generated {len(output)} characters (subprocess)")
+                return (output,)
+            else:
+                return ("[PromptGenerator] Generation returned empty result.",)
+
+        finally:
+            # Release VRAM after execution to prevent OOM in downstream nodes.
+            OllamaClient.cleanup_async(
+                model=model,
+                logger_prefix="PromptGenerator",
+                # streaming path already evicted via keep_alive="0s"; only the
+                # subprocess fallback leaves a model loaded at the 5m default.
+                unload=used_subprocess,
+                release_cuda=True,
+            )
