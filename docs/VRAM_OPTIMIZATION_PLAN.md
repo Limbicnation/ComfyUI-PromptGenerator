@@ -11,7 +11,7 @@
 
 The ComfyUI `PromptRefinerNode` (and sibling nodes: `PromptGeneratorNode`, `NegativePromptNode`, `PromptDualStreamRefinerNode`) calls local LLMs via Ollama for text generation. After each node completes, Ollama's default behavior retains the loaded model in GPU VRAM for **5 minutes** (`keep_alive=5m`). When the ComfyUI pipeline subsequently attempts to load VRAM-heavy diffusion models (e.g., LTXAVTEModel_ text encoder at 11.2 GB staged), CUDA OOM occurs:
 
-```
+```text
 RuntimeError: VRAM grow failed: 2013757440 bytes
 ```
 
@@ -30,7 +30,7 @@ RuntimeError: VRAM grow failed: 2013757440 bytes
 
 ## Current State (Before Fix)
 
-```
+```text
 Timeline (from ComfyUI error logs):
 03:38:21 — PromptRefiner calls qwen3:8b          → Ollama loads ~4.7 GB into VRAM
 03:38:27 — PromptGenerator calls qwen3-4b-deforum → Ollama loads ~2.6 GB (qwen3:8b evicted, swapped)
@@ -53,7 +53,7 @@ Timeline (from ComfyUI error logs):
 
 ## Target State (After Fix)
 
-```
+```text
 Timeline (with autounload):
 03:38:21 — PromptRefiner calls qwen3:8b with keep_alive="0s"
 03:38:27 — Model evicted from VRAM immediately, torch.cuda.empty_cache() runs async

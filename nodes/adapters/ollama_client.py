@@ -433,7 +433,11 @@ class OllamaClient:
             import torch
 
             if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+                # empty_cache() only frees the current device; clear every GPU so
+                # multi-GPU rigs don't leave cached blocks on non-default devices.
+                for device in range(torch.cuda.device_count()):
+                    with torch.cuda.device(device):
+                        torch.cuda.empty_cache()
                 torch.cuda.ipc_collect()
         except ImportError:
             pass

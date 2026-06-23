@@ -47,6 +47,7 @@ Negative prompt:"""
 
     @classmethod
     def INPUT_TYPES(cls) -> dict[str, Any]:
+        """Define input parameters for the node."""
         styles = list(cls.STYLE_HINTS.keys())
         return {
             "required": {

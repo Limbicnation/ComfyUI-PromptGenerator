@@ -80,6 +80,7 @@ Description: {prompt}"""
 
     @classmethod
     def INPUT_TYPES(cls) -> dict[str, Any]:
+        """Define input parameters for the node."""
         available_models = cls._get_available_models()
         return {
             "required": {

@@ -41,6 +41,7 @@ Refined prompt:"""
 
     @classmethod
     def INPUT_TYPES(cls) -> dict[str, Any]:
+        """Define input parameters for the node."""
         return {
             "required": {
                 "prompt": (
@@ -164,6 +165,10 @@ Refined prompt:"""
         # Determine effective seed
         effective_seed: int | None = None if seed == -1 else seed
 
+        # Honour the unload_model toggle: "0s" evicts immediately, None keeps the
+        # model loaded for the Ollama server default (so the UI toggle is truthful).
+        keep_alive = "0s" if unload_model else None
+
         used_subprocess = False
         try:
             for i in range(passes):
@@ -179,8 +184,7 @@ Refined prompt:"""
                 # Derive per-pass seed so multi-pass refinement isn't a no-op
                 pass_seed = None if effective_seed is None else effective_seed + i
 
-                # Generate refined version with keep_alive="0s" to unload
-                # the model from Ollama VRAM immediately after each pass.
+                # keep_alive evicts (or retains) the model per the unload_model toggle.
                 result = client.generate_streaming(
                     model=model,
                     prompt=refinement,
@@ -189,7 +193,7 @@ Refined prompt:"""
                     timeout=timeout,
                     pbar=pbar,
                     seed=pass_seed,
-                    keep_alive="0s",
+                    keep_alive=keep_alive,
                 )
 
                 if result.kind == "ok" and result.text is not None:
@@ -218,15 +222,13 @@ Refined prompt:"""
             return (current_prompt,)
 
         finally:
-            # Always release VRAM after node execution, regardless of success/failure.
-            # keep_alive="0s" already handles Ollama-side unloading; this covers
-            # the PyTorch CUDA allocator cache.
-            if unload_model:
-                OllamaClient.cleanup_async(
-                    model=model,
-                    logger_prefix="PromptRefiner",
-                    # streaming path already evicted via keep_alive="0s"; only the
-                    # subprocess fallback leaves a model loaded at the 5m default.
-                    unload=used_subprocess,
-                    release_cuda=True,
-                )
+            # Always release the PyTorch CUDA cache, regardless of success/failure.
+            # Evict the Ollama model only when the user asked to unload AND the
+            # subprocess fallback left one loaded at the 5m default (the streaming
+            # path already evicted it via keep_alive="0s").
+            OllamaClient.cleanup_async(
+                model=model,
+                logger_prefix="PromptRefiner",
+                unload=used_subprocess and unload_model,
+                release_cuda=True,
+            )
