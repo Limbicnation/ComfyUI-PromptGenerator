@@ -143,6 +143,7 @@ Negative prompt:"""
 
         logger.info("Generating negative for style='%s'", style)
 
+        used_subprocess = False
         try:
             # Generate via streaming with immediate VRAM unload
             result = client.generate_streaming(
@@ -161,6 +162,7 @@ Negative prompt:"""
                 return (f"[NegativePrompt] {result.message}",)
             else:
                 # timeout / transient — try subprocess
+                used_subprocess = True
                 success, output = client.generate_subprocess(model, negative_prompt_text, timeout)
                 if not success:
                     return (f"[NegativePrompt] Generation failed: {output}",)
@@ -179,6 +181,8 @@ Negative prompt:"""
             OllamaClient.cleanup_async(
                 model=model,
                 logger_prefix="NegativePrompt",
-                unload=True,  # idempotent; also evicts a subprocess-fallback load (keep_alive=5m)
+                # streaming path already evicted via keep_alive="0s"; only the
+                # subprocess fallback leaves a model loaded at the 5m default.
+                unload=used_subprocess,
                 release_cuda=True,
             )

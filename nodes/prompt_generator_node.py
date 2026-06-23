@@ -477,6 +477,7 @@ Format the response as a single, detailed photography prompt.""",
         client = OllamaClient(logger_prefix="PromptGenerator")
         pbar = client.create_progress_bar(unique_id)
 
+        used_subprocess = False
         try:
             # Use Ollama streaming API if available
             if OLLAMA_API_AVAILABLE:
@@ -526,6 +527,7 @@ Format the response as a single, detailed photography prompt.""",
                 print(f"[PromptGenerator] Streaming failed ({result.kind}), falling back to subprocess")
 
             # Fallback to subprocess (no temperature/top_p control)
+            used_subprocess = True
             success, output = client.generate_subprocess(model, prompt, timeout)
             if not success:
                 return (f"[PromptGenerator] {output}",)
@@ -547,6 +549,8 @@ Format the response as a single, detailed photography prompt.""",
             OllamaClient.cleanup_async(
                 model=model,
                 logger_prefix="PromptGenerator",
-                unload=True,  # idempotent; also evicts a subprocess-fallback load (keep_alive=5m)
+                # streaming path already evicted via keep_alive="0s"; only the
+                # subprocess fallback leaves a model loaded at the 5m default.
+                unload=used_subprocess,
                 release_cuda=True,
             )

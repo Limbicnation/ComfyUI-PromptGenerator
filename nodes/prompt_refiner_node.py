@@ -164,6 +164,7 @@ Refined prompt:"""
         # Determine effective seed
         effective_seed: int | None = None if seed == -1 else seed
 
+        used_subprocess = False
         try:
             for i in range(passes):
                 logger.info("Pass %d/%d with model='%s'", i + 1, passes, model)
@@ -198,6 +199,7 @@ Refined prompt:"""
                     return (f"[PromptRefiner] Pass {i + 1}: {result.message}",)
                 else:
                     # timeout / transient — try subprocess
+                    used_subprocess = True
                     success, output = client.generate_subprocess(model, refinement, timeout)
                     if not success:
                         return (f"[PromptRefiner] Pass {i + 1} failed: {output}",)
@@ -223,6 +225,8 @@ Refined prompt:"""
                 OllamaClient.cleanup_async(
                     model=model,
                     logger_prefix="PromptRefiner",
-                    unload=True,  # idempotent; also evicts a subprocess-fallback load (keep_alive=5m)
+                    # streaming path already evicted via keep_alive="0s"; only the
+                    # subprocess fallback leaves a model loaded at the 5m default.
+                    unload=used_subprocess,
                     release_cuda=True,
                 )

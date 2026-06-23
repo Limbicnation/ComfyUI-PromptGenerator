@@ -176,6 +176,7 @@ Description: {prompt}"""
 
         logger.info("Dual-stream refine with model='%s'", model)
 
+        used_subprocess = False
         try:
             result = client.generate_streaming(
                 model=model,
@@ -195,6 +196,7 @@ Description: {prompt}"""
                 return (f"[PromptDualStreamRefiner] {result.message}", "")
             else:
                 # timeout / transient — try the CLI subprocess fallback.
+                used_subprocess = True
                 success, output = client.generate_subprocess(model, instruction, timeout)
                 if not success:
                     return (f"[PromptDualStreamRefiner] {output}", "")
@@ -215,6 +217,8 @@ Description: {prompt}"""
             OllamaClient.cleanup_async(
                 model=model,
                 logger_prefix="PromptDualStreamRefiner",
-                unload=True,  # idempotent; also evicts a subprocess-fallback load (keep_alive=5m)
+                # streaming path already evicted via keep_alive="0s"; only the
+                # subprocess fallback leaves a model loaded at the 5m default.
+                unload=used_subprocess,
                 release_cuda=True,
             )
