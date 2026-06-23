@@ -175,35 +175,46 @@ Description: {prompt}"""
         instruction = self.INSTRUCTION_PROMPT.format(prompt=prompt.strip())
 
         logger.info("Dual-stream refine with model='%s'", model)
-        result = client.generate_streaming(
-            model=model,
-            prompt=instruction,
-            temperature=temperature,
-            top_p=top_p,
-            timeout=timeout,
-            pbar=pbar,
-            seed=effective_seed,
-        )
 
-        if result.kind == "ok" and result.text is not None:
-            output = result.text
-        elif result.kind in ("model_crash", "server_error", "unavailable"):
-            # Subprocess fallback won't help for these; surface directly.
-            return (f"[PromptDualStreamRefiner] {result.message}", "")
-        else:
-            # timeout / transient — try the CLI subprocess fallback.
-            success, output = client.generate_subprocess(model, instruction, timeout)
-            if not success:
-                return (f"[PromptDualStreamRefiner] {output}", "")
+        try:
+            result = client.generate_streaming(
+                model=model,
+                prompt=instruction,
+                temperature=temperature,
+                top_p=top_p,
+                timeout=timeout,
+                pbar=pbar,
+                seed=effective_seed,
+                keep_alive="0s",
+            )
 
-        positive, negative = parse_dual_stream(output)
+            if result.kind == "ok" and result.text is not None:
+                output = result.text
+            elif result.kind in ("model_crash", "server_error", "unavailable"):
+                # Subprocess fallback won't help for these; surface directly.
+                return (f"[PromptDualStreamRefiner] {result.message}", "")
+            else:
+                # timeout / transient — try the CLI subprocess fallback.
+                success, output = client.generate_subprocess(model, instruction, timeout)
+                if not success:
+                    return (f"[PromptDualStreamRefiner] {output}", "")
 
-        if pbar is not None:
-            pbar.update_absolute(100)
+            positive, negative = parse_dual_stream(output)
 
-        if not positive and not negative:
-            logger.warning("Dual-stream parse produced empty output")
-            return ("[PromptDualStreamRefiner] Model returned no usable prompt.", "")
+            if pbar is not None:
+                pbar.update_absolute(100)
 
-        logger.info("Dual-stream complete: +%d / -%d chars", len(positive), len(negative))
-        return (positive, negative)
+            if not positive and not negative:
+                logger.warning("Dual-stream parse produced empty output")
+                return ("[PromptDualStreamRefiner] Model returned no usable prompt.", "")
+
+            logger.info("Dual-stream complete: +%d / -%d chars", len(positive), len(negative))
+            return (positive, negative)
+
+        finally:
+            OllamaClient.cleanup_async(
+                model=model,
+                logger_prefix="PromptDualStreamRefiner",
+                unload=True,  # idempotent; also evicts a subprocess-fallback load (keep_alive=5m)
+                release_cuda=True,
+            )

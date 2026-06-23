@@ -18,6 +18,10 @@ class PromptRefinerNode:
 
     Takes a raw prompt string, sends it to Ollama with a refinement system prompt,
     and returns an improved version. Supports 1-3 refinement passes.
+
+    VRAM safety: models are unloaded from Ollama VRAM immediately after
+    execution via ``keep_alive="0s"``, and ``torch.cuda.empty_cache()`` is
+    called asynchronously to prevent OOM in downstream diffusion nodes.
     """
 
     REFINEMENT_PROMPT = """You are an expert prompt engineer for Stable Diffusion.
@@ -104,6 +108,14 @@ Refined prompt:"""
                         "step": 10,
                     },
                 ),
+                "unload_model": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "label_on": "Unload After Use",
+                        "label_off": "Keep Loaded",
+                    },
+                ),
             },
         }
 
@@ -122,6 +134,7 @@ Refined prompt:"""
         top_p: float = 0.9,
         seed: int = -1,
         timeout: int = 120,
+        unload_model: bool = True,
         unique_id: str | None = None,
     ) -> tuple[str]:
         """
@@ -132,8 +145,10 @@ Refined prompt:"""
             model: Ollama model to use
             passes: Number of refinement iterations (1-3)
             temperature: Generation temperature
+            top_p: Top-p sampling parameter
             seed: Seed for deterministic generation (-1 for random)
             timeout: Maximum generation time per pass
+            unload_model: If True, unload Ollama model from VRAM after execution
             unique_id: ComfyUI node execution ID for progress tracking
 
         Returns:
@@ -149,50 +164,65 @@ Refined prompt:"""
         # Determine effective seed
         effective_seed: int | None = None if seed == -1 else seed
 
-        for i in range(passes):
-            logger.info("Pass %d/%d with model='%s'", i + 1, passes, model)
+        try:
+            for i in range(passes):
+                logger.info("Pass %d/%d with model='%s'", i + 1, passes, model)
+
+                if pbar is not None:
+                    progress = int((i / passes) * 100)
+                    pbar.update_absolute(progress)
+
+                # Build refinement prompt
+                refinement = self.REFINEMENT_PROMPT.format(prompt=current_prompt)
+
+                # Derive per-pass seed so multi-pass refinement isn't a no-op
+                pass_seed = None if effective_seed is None else effective_seed + i
+
+                # Generate refined version with keep_alive="0s" to unload
+                # the model from Ollama VRAM immediately after each pass.
+                result = client.generate_streaming(
+                    model=model,
+                    prompt=refinement,
+                    temperature=temperature,
+                    top_p=top_p,
+                    timeout=timeout,
+                    pbar=pbar,
+                    seed=pass_seed,
+                    keep_alive="0s",
+                )
+
+                if result.kind == "ok" and result.text is not None:
+                    output = result.text
+                elif result.kind in ("model_crash", "server_error", "unavailable"):
+                    # Subprocess fallback would also fail; surface directly.
+                    return (f"[PromptRefiner] Pass {i + 1}: {result.message}",)
+                else:
+                    # timeout / transient — try subprocess
+                    success, output = client.generate_subprocess(model, refinement, timeout)
+                    if not success:
+                        return (f"[PromptRefiner] Pass {i + 1} failed: {output}",)
+
+                # Clean the output
+                cleaned = extract_final_prompt(output.strip())
+                if cleaned:
+                    current_prompt = cleaned
+                    logger.info("Pass %d complete: %d chars", i + 1, len(current_prompt))
+                else:
+                    logger.warning("Pass %d returned empty, keeping previous", i + 1)
 
             if pbar is not None:
-                progress = int((i / passes) * 100)
-                pbar.update_absolute(progress)
+                pbar.update_absolute(100)
 
-            # Build refinement prompt
-            refinement = self.REFINEMENT_PROMPT.format(prompt=current_prompt)
+            return (current_prompt,)
 
-            # Derive per-pass seed so multi-pass refinement isn't a no-op
-            pass_seed = None if effective_seed is None else effective_seed + i
-
-            # Generate refined version
-            result = client.generate_streaming(
-                model=model,
-                prompt=refinement,
-                temperature=temperature,
-                top_p=top_p,
-                timeout=timeout,
-                pbar=pbar,
-                seed=pass_seed,
-            )
-
-            if result.kind == "ok" and result.text is not None:
-                output = result.text
-            elif result.kind in ("model_crash", "server_error", "unavailable"):
-                # Subprocess fallback would also fail; surface directly.
-                return (f"[PromptRefiner] Pass {i + 1}: {result.message}",)
-            else:
-                # timeout / transient — try subprocess
-                success, output = client.generate_subprocess(model, refinement, timeout)
-                if not success:
-                    return (f"[PromptRefiner] Pass {i + 1} failed: {output}",)
-
-            # Clean the output
-            cleaned = extract_final_prompt(output.strip())
-            if cleaned:
-                current_prompt = cleaned
-                logger.info("Pass %d complete: %d chars", i + 1, len(current_prompt))
-            else:
-                logger.warning("Pass %d returned empty, keeping previous", i + 1)
-
-        if pbar is not None:
-            pbar.update_absolute(100)
-
-        return (current_prompt,)
+        finally:
+            # Always release VRAM after node execution, regardless of success/failure.
+            # keep_alive="0s" already handles Ollama-side unloading; this covers
+            # the PyTorch CUDA allocator cache.
+            if unload_model:
+                OllamaClient.cleanup_async(
+                    model=model,
+                    logger_prefix="PromptRefiner",
+                    unload=True,  # idempotent; also evicts a subprocess-fallback load (keep_alive=5m)
+                    release_cuda=True,
+                )

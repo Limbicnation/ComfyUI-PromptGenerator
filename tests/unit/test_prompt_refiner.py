@@ -14,7 +14,7 @@ class TestPromptRefinerSeed:
         node = PromptRefinerNode()
         captured_seeds: list[int | None] = []
 
-        def _capture_seed(*, model, prompt, temperature, top_p, timeout, pbar, seed):
+        def _capture_seed(*, model, prompt, temperature, top_p, timeout, pbar, seed, keep_alive=None):
             captured_seeds.append(seed)
             return StreamResult(text=f"refined with seed={seed}", kind="ok")
 
@@ -43,7 +43,7 @@ class TestPromptRefinerSeed:
         node = PromptRefinerNode()
         captured_seeds: list[int | None] = []
 
-        def _capture_seed(*, model, prompt, temperature, top_p, timeout, pbar, seed):
+        def _capture_seed(*, model, prompt, temperature, top_p, timeout, pbar, seed, keep_alive=None):
             captured_seeds.append(seed)
             return StreamResult(text="refined", kind="ok")
 

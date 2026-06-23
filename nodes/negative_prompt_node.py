@@ -143,32 +143,42 @@ Negative prompt:"""
 
         logger.info("Generating negative for style='%s'", style)
 
-        # Generate via streaming
-        result = client.generate_streaming(
-            model=model,
-            prompt=negative_prompt_text,
-            temperature=temperature,
-            top_p=top_p,
-            timeout=timeout,
-        )
+        try:
+            # Generate via streaming with immediate VRAM unload
+            result = client.generate_streaming(
+                model=model,
+                prompt=negative_prompt_text,
+                temperature=temperature,
+                top_p=top_p,
+                timeout=timeout,
+                keep_alive="0s",
+            )
 
-        if result.kind == "ok" and result.text is not None:
-            output = result.text
-        elif result.kind in ("model_crash", "server_error", "unavailable"):
-            # Subprocess fallback would also fail; surface message directly.
-            return (f"[NegativePrompt] {result.message}",)
-        else:
-            # timeout / transient — try subprocess
-            success, output = client.generate_subprocess(model, negative_prompt_text, timeout)
-            if not success:
-                return (f"[NegativePrompt] Generation failed: {output}",)
+            if result.kind == "ok" and result.text is not None:
+                output = result.text
+            elif result.kind in ("model_crash", "server_error", "unavailable"):
+                # Subprocess fallback would also fail; surface message directly.
+                return (f"[NegativePrompt] {result.message}",)
+            else:
+                # timeout / transient — try subprocess
+                success, output = client.generate_subprocess(model, negative_prompt_text, timeout)
+                if not success:
+                    return (f"[NegativePrompt] Generation failed: {output}",)
 
-        # Clean the output
-        negative = extract_final_prompt(output.strip())
-        if negative:
-            logger.info("Generated %d characters", len(negative))
-            return (negative,)
-        else:
-            # Fallback to static hints if LLM fails
-            logger.warning("LLM returned empty, using static hints")
-            return (style_hints,)
+            # Clean the output
+            negative = extract_final_prompt(output.strip())
+            if negative:
+                logger.info("Generated %d characters", len(negative))
+                return (negative,)
+            else:
+                # Fallback to static hints if LLM fails
+                logger.warning("LLM returned empty, using static hints")
+                return (style_hints,)
+
+        finally:
+            OllamaClient.cleanup_async(
+                model=model,
+                logger_prefix="NegativePrompt",
+                unload=True,  # idempotent; also evicts a subprocess-fallback load (keep_alive=5m)
+                release_cuda=True,
+            )
